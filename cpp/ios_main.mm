@@ -882,7 +882,7 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
             s_settings_interface->SetIntValue("EmuCore/GS", "VsyncQueueSize", 2);
 
             // Speedhacks
-            s_settings_interface->SetBoolValue("EmuCore/Speedhacks", "MTVU", false);
+            s_settings_interface->SetBoolValue("EmuCore/Speedhacks", "vuThread", false); // MTVU off by default (user toggle: Emulator > Experimental)
             
             Console.WriteLn("@@CFG_DEFAULTS@@ created=1 CoreType=0 UseArm64Dynarec=false EnableEE=1");
             s_settings_interface->Save();

@@ -62,6 +62,16 @@ final class SettingsStore: @unchecked Sendable {
     var intcStat: Bool {
         didSet { iPSX2Bridge.setINIBool("EmuCore/Speedhacks", key: "IntcStat", value: intcStat) }
     }
+    /// EE cycle skip (0-3): skips EE cycles so the CPU emulation does less work.
+    var eeCycleSkip: Int {
+        didSet { iPSX2Bridge.setINIInt("EmuCore/Speedhacks", key: "EECycleSkip", value: Int32(clamping:eeCycleSkip)) }
+    }
+
+    // ── Experimental ──
+    /// MTVU: runs VU1 on its own thread. Big speedup on multi-core devices, can hang some games.
+    var mtvu: Bool {
+        didSet { iPSX2Bridge.setINIBool("EmuCore/Speedhacks", key: "vuThread", value: mtvu) }
+    }
 
     // ── Graphics ──
     var renderer: Int {
@@ -96,6 +106,16 @@ final class SettingsStore: @unchecked Sendable {
     }
     var dithering: Int {
         didSet { iPSX2Bridge.setINIInt("EmuCore/GS", key: "dithering_ps2", value: Int32(clamping:dithering)) }
+    }
+
+    // ── Graphics: Performance ──
+    /// Skip presenting frames identical to the previous one (games running below 60 FPS).
+    var skipDuplicateFrames: Bool {
+        didSet { iPSX2Bridge.setINIBool("EmuCore/GS", key: "SkipDuplicateFrames", value: skipDuplicateFrames) }
+    }
+    /// GSHardwareDownloadMode: 0 Accurate, 1 No Readbacks, 2 Unsynchronized, 3 Disabled.
+    var hwDownloadMode: Int {
+        didSet { iPSX2Bridge.setINIInt("EmuCore/GS", key: "HWDownloadMode", value: Int32(clamping:hwDownloadMode)) }
     }
 
     // ── OSD Overlay ──
@@ -145,6 +165,8 @@ final class SettingsStore: @unchecked Sendable {
         vu1Instant = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "vu1Instant", defaultValue: true)
         waitLoop = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "WaitLoop", defaultValue: true)
         intcStat = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "IntcStat", defaultValue: true)
+        eeCycleSkip = Int(iPSX2Bridge.getINIInt("EmuCore/Speedhacks", key: "EECycleSkip", defaultValue: 0))
+        mtvu = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "vuThread", defaultValue: false)
         // Graphics
         renderer = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "Renderer", defaultValue: 17))
         upscaleMultiplier = iPSX2Bridge.getINIFloat("EmuCore/GS", key: "upscale_multiplier", defaultValue: 1.0)
@@ -157,6 +179,8 @@ final class SettingsStore: @unchecked Sendable {
         aspectRatio = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "AspectRatio", defaultValue: 0))
         blendingAccuracy = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "accurate_blending_unit", defaultValue: 1))
         dithering = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "dithering_ps2", defaultValue: 2))
+        skipDuplicateFrames = iPSX2Bridge.getINIBool("EmuCore/GS", key: "SkipDuplicateFrames", defaultValue: false)
+        hwDownloadMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "HWDownloadMode", defaultValue: 0))
         // OSD
         osdPreset = OsdPreset(rawValue: Int(iPSX2Bridge.getINIInt("iPSX2/UI", key: "OsdPreset", defaultValue: 0))) ?? .off
         osdShowFPS = iPSX2Bridge.getINIBool("EmuCore/GS", key: "OsdShowFPS", defaultValue: false)
@@ -167,8 +191,6 @@ final class SettingsStore: @unchecked Sendable {
         // UI
         padOpacity = iPSX2Bridge.getINIFloat("iPSX2/UI", key: "PadOpacity", defaultValue: 0.6)
         hapticFeedback = iPSX2Bridge.getINIBool("iPSX2/UI", key: "HapticFeedback", defaultValue: true)
-        // [P60] Force MTVU off (known buggy)
-        iPSX2Bridge.setINIBool("EmuCore/Speedhacks", key: "vuThread", value: false)
         // Apply OSD preset
         iPSX2Bridge.applyOsdPreset(Int32(clamping:osdPreset.rawValue))
     }
@@ -186,6 +208,8 @@ final class SettingsStore: @unchecked Sendable {
         vu1Instant = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "vu1Instant", defaultValue: true)
         waitLoop = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "WaitLoop", defaultValue: true)
         intcStat = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "IntcStat", defaultValue: true)
+        eeCycleSkip = Int(iPSX2Bridge.getINIInt("EmuCore/Speedhacks", key: "EECycleSkip", defaultValue: 0))
+        mtvu = iPSX2Bridge.getINIBool("EmuCore/Speedhacks", key: "vuThread", defaultValue: false)
         renderer = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "Renderer", defaultValue: 17))
         upscaleMultiplier = iPSX2Bridge.getINIFloat("EmuCore/GS", key: "upscale_multiplier", defaultValue: 1.0)
         vsyncQueueSize = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "VsyncQueueSize", defaultValue: 8))
@@ -197,6 +221,8 @@ final class SettingsStore: @unchecked Sendable {
         aspectRatio = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "AspectRatio", defaultValue: 0))
         blendingAccuracy = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "accurate_blending_unit", defaultValue: 1))
         dithering = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "dithering_ps2", defaultValue: 2))
+        skipDuplicateFrames = iPSX2Bridge.getINIBool("EmuCore/GS", key: "SkipDuplicateFrames", defaultValue: false)
+        hwDownloadMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "HWDownloadMode", defaultValue: 0))
         osdPreset = OsdPreset(rawValue: Int(iPSX2Bridge.getINIInt("iPSX2/UI", key: "OsdPreset", defaultValue: 0))) ?? .off
         osdShowFPS = iPSX2Bridge.getINIBool("EmuCore/GS", key: "OsdShowFPS", defaultValue: false)
         osdShowSpeed = iPSX2Bridge.getINIBool("EmuCore/GS", key: "OsdShowSpeed", defaultValue: false)
@@ -238,6 +264,8 @@ final class SettingsStore: @unchecked Sendable {
         vu1Instant = true       // PC PCSX2 recommended default
         waitLoop = true         // PC PCSX2 recommended default
         intcStat = true         // PC PCSX2 recommended default
+        eeCycleSkip = 0
+        mtvu = false            // experimental, off by default
     }
 
     /// Reset graphics settings to PC PCSX2 defaults
@@ -253,5 +281,7 @@ final class SettingsStore: @unchecked Sendable {
         aspectRatio = 0         // Auto 4:3/3:2
         blendingAccuracy = 1    // Basic
         dithering = 2           // Scaled
+        skipDuplicateFrames = false
+        hwDownloadMode = 0      // Accurate
     }
 }

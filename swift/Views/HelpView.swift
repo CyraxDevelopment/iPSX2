@@ -46,8 +46,20 @@ private let helpData: [HelpSection] = [
             answer: "Speeds up EE memory access via direct mapping. Disable if 3D graphics are broken. Requires app restart."
         ),
         HelpItem(
-            question: "MTVU",
-            answer: "Offloads VU1 processing to a separate thread. Improves performance on multi-core devices, but may cause instability in some games."
+            question: "MTVU (Experimental)",
+            answer: "Emulator > Experimental. Offloads VU1 processing to a separate thread. Often the biggest speedup for 3D-heavy games on multi-core devices, but some games hang or glitch with it. Off by default; if a game freezes with MTVU on, turn it off and boot again."
+        ),
+        HelpItem(
+            question: "EE Cycle Rate / EE Cycle Skip",
+            answer: "Negative EE Cycle Rate (underclock) and EE Cycle Skip reduce CPU emulation work and can raise FPS in CPU-bound games, at the cost of in-game slowdown or timing issues. Positive EE Cycle Rate (overclock) costs more performance; only use it for games that lag on a real PS2."
+        ),
+        HelpItem(
+            question: "Skip Duplicate Frames",
+            answer: "Graphics > Performance. Skips presenting frames identical to the previous one, saving GPU work in games that run at 30 FPS."
+        ),
+        HelpItem(
+            question: "Hardware Download Mode",
+            answer: "Graphics > Performance. GPU→CPU readbacks are slow on mobile GPUs. No Readbacks or Unsynchronized can give a large speedup, but may break effects that read the framebuffer back. Switch back to Accurate if something looks wrong."
         ),
         HelpItem(
             question: "Internal Resolution",

@@ -116,6 +116,27 @@ struct GraphicsSettingsView: View {
             }
 
             Section {
+                Toggle("Skip Duplicate Frames", isOn: $settings.skipDuplicateFrames)
+                Text("Does not present frames identical to the previous one. Saves GPU work in 30 FPS games. May cause uneven frame pacing in some titles.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Hardware Download Mode", selection: $settings.hwDownloadMode) {
+                    Text("Accurate (Default)").tag(0)
+                    Text("No Readbacks").tag(1)
+                    Text("Unsynchronized").tag(2)
+                    Text("Disabled").tag(3)
+                }
+                Text("Controls GPU→CPU readbacks, a common cause of slowdowns on mobile GPUs. No Readbacks / Unsynchronized are faster but can break effects that read the framebuffer back (e.g. some post-processing, menus, or save previews). Use Accurate if something looks wrong.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Performance")
+            } footer: {
+                Text("Changes take effect on next VM boot.")
+            }
+
+            Section {
                 Button("Reset Graphics to Defaults") {
                     settings.resetGraphicsDefaults()
                 }
