@@ -20,6 +20,12 @@ class iPSX2HostingController<Content: View>: UIHostingController<Content> {
 @objc public class SwiftUIHost: NSObject {
     @MainActor
     @objc public static func createMenuController() -> UIViewController {
+        // Folders the user added from the Files app are only readable while a security scope is
+        // held open, and reopening one needs the bookmark saved when it was picked. This has to
+        // happen before the first library scan, because the scanner reads with plain POSIX calls
+        // and would simply find an unreadable directory.
+        ScanFolderStore.shared.restoreAll()
+
         let hostingController = iPSX2HostingController(rootView: RootView())
         hostingController.view.backgroundColor = .clear
         hostingController.view.isOpaque = false

@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 import SwiftUI
-import UIKit
 
 struct RootView: View {
     @State private var appState = AppState.shared
     @State private var fileImporter = FileImportHandler.shared
-    @AppStorage("colorScheme") private var colorSchemeRaw: String = "system"
 
     var body: some View {
         ZStack {
@@ -20,8 +18,6 @@ struct RootView: View {
                 GameScreenView()
             }
         }
-        .onAppear { applyTheme(colorSchemeRaw) }
-        .onChange(of: colorSchemeRaw) { _, newValue in applyTheme(newValue) }
         .onOpenURL { url in
             fileImporter.handleURL(url)
         }
@@ -30,19 +26,6 @@ struct RootView: View {
         } message: {
             Text(fileImporter.lastImportMessage ?? "")
         }
-    }
-
-    private func applyTheme(_ scheme: String) {
-        let style: UIUserInterfaceStyle
-        switch scheme {
-        case "light": style = .light
-        case "dark":  style = .dark
-        default:      style = .unspecified
-        }
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .forEach { $0.overrideUserInterfaceStyle = style }
     }
 }
 
@@ -64,9 +47,13 @@ struct MenuTabView: View {
                 }
                 .tag(1)
 
-            HelpView()
+            // [TWEAK] Replaces the old Help tab. Its guidance did not need a permanent tab —
+            // it now sits where each question comes up (the library's empty state, the folder
+            // list, the settings footers) plus a Help row under Settings. Per-game settings and
+            // cheats did need one: they are per game, so they cannot live in global Settings.
+            TweaksListView()
                 .tabItem {
-                    Label("Help", systemImage: "questionmark.circle")
+                    Label("Tweaks", systemImage: "wand.and.stars")
                 }
                 .tag(2)
 

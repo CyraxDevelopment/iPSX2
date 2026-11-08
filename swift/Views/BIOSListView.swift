@@ -56,24 +56,64 @@ struct BIOSListView: View {
         .foregroundStyle(.primary)
     }
 
+    // The old text named only Documents/bios/ and only .bin. Both were narrower than what the
+    // code does: a BIOS-shaped file left in Documents/ is moved into bios/ for you, and .rom is
+    // accepted alongside .bin. Dropping one in the root is the easier route — that is the folder
+    // the Files app opens — so it is worth saying.
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "cpu")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("No BIOS Found")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("Place PS2 BIOS files (.bin) in:\nDocuments/bios/")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Text("Use the Files app or iTunes File Sharing\nto transfer BIOS files.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.secondary)
+                Text("No BIOS Found")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    folderHint(
+                        icon: "folder.fill",
+                        title: "Documents/bios/",
+                        detail: "Where the BIOS is kept."
+                    )
+                    folderHint(
+                        icon: "folder",
+                        title: "Documents/",
+                        detail: "A BIOS dropped here is moved into bios/ for you. Tap refresh after copying it over."
+                    )
+                }
+                .frame(maxWidth: 420)
+
+                VStack(spacing: 6) {
+                    Text("Accepted files")
+                        .font(.subheadline).fontWeight(.medium)
+                    Text(".bin or .rom, between 1 MB and 50 MB")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Dump it from a PS2 you own.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+
+                Text("Copy files over with the Files app, or from a computer with Finder or iTunes File Sharing.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
         }
-        .padding()
+    }
+
+    private func folderHint(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(.blue)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline).fontWeight(.medium)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func loadBIOSes() {

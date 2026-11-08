@@ -1,5 +1,13 @@
-// HelpView.swift — Practical user guide
+// HelpView.swift — practical user guide
 // SPDX-License-Identifier: GPL-3.0+
+//
+// Reached from Settings › About rather than from a tab of its own. What used to be here about
+// where files go is now also said at the point it comes up — the library's empty state and the
+// game-folder list — so this is the reference copy, not the only copy.
+//
+// Everything below is checked against what the code actually does. The previous version claimed
+// .cue files were supported (nothing in the tree reads one) and that files in Documents/ were
+// detected (they were not, until the scan list gained that folder).
 
 import SwiftUI
 
@@ -16,111 +24,89 @@ struct HelpItem: Identifiable {
     let answer: String
 }
 
-// [P51] Rewritten: practical file placement + settings explanations only
 private let helpData: [HelpSection] = [
     HelpSection(title: "File Placement", icon: "folder", items: [
         HelpItem(
-            question: "BIOS file",
-            answer: "Place your PS2 BIOS (.bin / .rom) in Documents/bios/ via the Files app or iTunes File Sharing (Finder). Files placed in the Documents/ root folder are also detected automatically. Select the default BIOS in the BIOS tab."
+            question: "Where do game files go?",
+            answer: "Documents/iso/ — including any subfolders you make inside it — or Documents/ itself. Both are scanned every time the library refreshes. You can add any other folder under Settings › Game Folders."
         ),
         HelpItem(
-            question: "Game files",
-            answer: "Place ISO, BIN, CHD, IMG, or ELF game files in Documents/iso/. Files in the Documents/ root folder are also detected. They appear in the Games tab."
+            question: "Which game formats work?",
+            answer: "ISO, BIN, IMG, MDF, CSO, ZSO, GZ and CHD disc images, plus ELF executables. CUE sheets are not read — if you have a BIN/CUE pair, point the app at the BIN."
         ),
         HelpItem(
-            question: "Where is the Documents folder?",
-            answer: "On Mac: open Finder, select your iPhone in the sidebar, then the Files tab. On Windows: use iTunes > File Sharing. You can also use the iOS Files app (On My iPhone > iPSX2)."
+            question: "Where does the BIOS go?",
+            answer: "Documents/bios/, as a .bin or .rom between 1 MB and 50 MB, dumped from a PS2 you own. A BIOS left loose in Documents/ is moved into bios/ for you — tap refresh in the BIOS tab after copying it over. Choose the one to use there."
+        ),
+        HelpItem(
+            question: "Where do cheat files go?",
+            answer: "Documents/cheats/, as .pnach files named after the game's serial. The Tweaks tab can import one for you and shows which codes a game has."
+        ),
+        HelpItem(
+            question: "How do I get files onto the device?",
+            answer: "Use the Files app — this device's own storage, then iPSX2. Or connect it to a computer: Finder › your device › Files on a Mac, iTunes › File Sharing on Windows."
+        ),
+        HelpItem(
+            question: "I added a game and it is not listed.",
+            answer: "Pull down on the Games list, or tap the refresh button, to rescan. If it still does not appear, check that its extension is one of the formats above and that it is in a folder listed under Settings › Game Folders."
         ),
     ]),
     HelpSection(title: "Settings Guide", icon: "gearshape", items: [
         HelpItem(
-            question: "EE / IOP / VU0 / VU1 (JIT vs Interpreter)",
-            answer: "JIT (Recompiler) is much faster. Interpreter is slower but more stable. If a game crashes or behaves incorrectly, try switching individual components to Interpreter. Changes take effect on next boot."
+            question: "JIT or Interpreter?",
+            answer: "This build runs the JIT recompiler by default for every component (EE, IOP, VU0, VU1), which needs JIT enabled for the app — e.g. StikDebug with the legacy script. Interpreter is much slower but the most faithful: switch a single component to it if a game misbehaves. MTVU (Emulator > Experimental) can add a large speedup in 3D-heavy games but may hang some titles. Changes take effect on the next boot."
         ),
         HelpItem(
             question: "Fast Boot",
-            answer: "Skips the PS2 BIOS intro and boots the game directly. Some games require this OFF to initialize correctly (e.g. missing 3D graphics)."
-        ),
-        HelpItem(
-            question: "Fastmem",
-            answer: "Speeds up EE memory access via direct mapping. Disable if 3D graphics are broken. Requires app restart."
-        ),
-        HelpItem(
-            question: "MTVU (Experimental)",
-            answer: "Emulator > Experimental. Offloads VU1 processing to a separate thread. Often the biggest speedup for 3D-heavy games on multi-core devices, but some games hang or glitch with it. Off by default; if a game freezes with MTVU on, turn it off and boot again."
-        ),
-        HelpItem(
-            question: "EE Cycle Rate / EE Cycle Skip",
-            answer: "Negative EE Cycle Rate (underclock) and EE Cycle Skip reduce CPU emulation work and can raise FPS in CPU-bound games, at the cost of in-game slowdown or timing issues. Positive EE Cycle Rate (overclock) costs more performance; only use it for games that lag on a real PS2."
-        ),
-        HelpItem(
-            question: "Skip Duplicate Frames",
-            answer: "Graphics > Performance. Skips presenting frames identical to the previous one, saving GPU work in games that run at 30 FPS."
-        ),
-        HelpItem(
-            question: "Hardware Download Mode",
-            answer: "Graphics > Performance. GPU→CPU readbacks are slow on mobile GPUs. No Readbacks or Unsynchronized can give a large speedup, but may break effects that read the framebuffer back. Switch back to Accurate if something looks wrong."
+            answer: "Skips the PS2 BIOS intro and starts the game directly. A few games need the intro to initialise properly — missing 3D graphics is the usual sign — so turn it off for those."
         ),
         HelpItem(
             question: "Internal Resolution",
-            answer: "1x = native PS2 resolution (recommended). 2x/3x provide higher resolution output but significantly increase GPU load."
+            answer: "1x is the PS2's own resolution and the safe choice. 2x and 3x are sharper and cost a lot more GPU time."
         ),
         HelpItem(
-            question: "VSync Queue Size",
-            answer: "Number of pre-rendered frames. Higher values reduce frame drops but increase input latency. Default: 8."
+            question: "Settings for one game only",
+            answer: "The Tweaks tab holds per-game overrides. Anything left alone there follows the global setting, so you only have to set what actually differs."
         ),
     ]),
-    HelpSection(title: "Overlay", icon: "speedometer", items: [
+    HelpSection(title: "On-Screen Display", icon: "chart.bar.xaxis", items: [
         HelpItem(
-            question: "Overlay presets",
-            answer: "OFF: No overlay. Simple: FPS + CPU usage. Detail: FPS, Speed, CPU, Resolution. Full: Everything including Frame Times graph. Configure in Settings > Overlay."
+            question: "Presets and items",
+            answer: "A preset in Settings › On-Screen Display turns on a set of items at once; each item can then be switched individually. The position can be top left or top right."
         ),
         HelpItem(
-            question: "In-game toggle",
-            answer: "Tap the menu button (top-right) during gameplay and select Show/Hide Overlay. This toggles visibility without changing your preset."
+            question: "Turning it off during a game",
+            answer: "Tap the menu button in the corner of the screen and switch OSD off. Turning it back on restores the preset you had chosen."
         ),
-    ]),
-    HelpSection(title: "Supported Formats", icon: "doc.circle", items: [
-        HelpItem(question: "Game formats", answer: "ISO, BIN (>50MB), CHD, IMG"),
-        HelpItem(question: "BIOS formats", answer: "BIN, ROM (1-50MB, dumped from your own PS2)"),
+        HelpItem(
+            question: "FPS and VPS",
+            answer: "FPS is how fast the game itself is running. VPS is how many frames actually reached the screen. They differ on purpose — a game running internally at 30 can still present at 60."
+        ),
     ]),
 ]
 
 struct HelpView: View {
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(helpData) { section in
-                    Section {
-                        ForEach(section.items) { item in
-                            DisclosureGroup {
-                                Text(item.answer)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.vertical, 4)
-                            } label: {
-                                Text(item.question)
-                                    .font(.body)
-                            }
-                        }
-                    } header: {
-                        Label(section.title, systemImage: section.icon)
-                    }
-                }
-
+        List {
+            ForEach(helpData) { section in
                 Section {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text(iPSX2Bridge.buildVersion())
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                    ForEach(section.items) { item in
+                        DisclosureGroup {
+                            Text(item.answer)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 4)
+                        } label: {
+                            Text(item.question)
+                                .font(.body)
+                        }
                     }
                 } header: {
-                    Label("About", systemImage: "info.circle")
+                    Label(section.title, systemImage: section.icon)
                 }
             }
-            .navigationTitle("Help")
         }
+        .navigationTitle("Help")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

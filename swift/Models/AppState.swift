@@ -15,6 +15,9 @@ final class AppState: @unchecked Sendable {
     var currentScreen: Screen = .menu
     var selectedTab: Int = 0
     var runningGameName: String? = nil
+    /// [F8] Absolute path of the running entry, when it came from the game list. Titles are not
+    /// unique (and are localised), so the path is what identifies "this row is running".
+    var runningGamePath: String? = nil
     var hideStatusBar: Bool = false
 
     @ObservationIgnored private var pendingBootAction: (() -> Void)?
@@ -28,6 +31,7 @@ final class AppState: @unchecked Sendable {
             object: nil, queue: .main
         ) { [weak self] _ in
             self?.runningGameName = nil
+            self?.runningGamePath = nil
             if let action = self?.pendingBootAction {
                 self?.pendingBootAction = nil
                 action()
@@ -51,6 +55,18 @@ final class AppState: @unchecked Sendable {
         iPSX2Bridge.bootISO(isoName)
         iPSX2Bridge.requestVMBoot()
         runningGameName = isoName
+        runningGamePath = nil
+        currentScreen = .playing
+    }
+
+    /// [F8] Boot a game-list entry. Entries carry an absolute path and a GameDB title, so
+    /// identity (the path) and what is shown to the user (the title) are no longer the same
+    /// string the way they were when the list was raw filenames.
+    func bootGame(path: String, title: String) {
+        iPSX2Bridge.bootGame(atPath: path)
+        iPSX2Bridge.requestVMBoot()
+        runningGameName = title
+        runningGamePath = path
         currentScreen = .playing
     }
 
@@ -58,6 +74,7 @@ final class AppState: @unchecked Sendable {
         iPSX2Bridge.setINIString("GameISO", key: "BootISO", value: "")
         iPSX2Bridge.requestVMBoot()
         runningGameName = "BIOS"
+        runningGamePath = nil
         currentScreen = .playing
     }
 
@@ -82,19 +99,17 @@ final class AppState: @unchecked Sendable {
         iPSX2Bridge.requestVMShutdown()
     }
 
+    func shutdownAndBoot(path: String, title: String) {
+        pendingBootAction = { [weak self] in
+            self?.bootGame(path: path, title: title)
+        }
+        iPSX2Bridge.requestVMShutdown()
+    }
+
     func shutdownAndBootBIOS() {
         pendingBootAction = { [weak self] in
             self?.bootBIOSOnly()
         }
         iPSX2Bridge.requestVMShutdown()
-    }
-
-    deinit {
-        if let obs = shutdownObserver {
-            NotificationCenter.default.removeObserver(obs)
-        }
-        if let obs = autoBootObserver {
-            NotificationCenter.default.removeObserver(obs)
-        }
     }
 }

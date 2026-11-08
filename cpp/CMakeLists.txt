@@ -160,9 +160,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(SWIFT_SOURCES
         ${CMAKE_SOURCE_DIR}/../swift/Views/RootView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/GameListView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/CoverDownloadView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/BIOSListView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/HelpView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/GameScreenView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/SaveStateView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/MetalGameView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/EmulatorView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/VirtualControllerView.swift
@@ -170,11 +172,19 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/SettingsRootView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/EmulatorSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GraphicsSettingsView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/AudioSettingsView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/PatchSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/OverlaySettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GamepadSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/VirtualPadSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/PadLayoutEditView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GameFoldersView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/TweaksListView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/GameTweaksView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/GameCheatsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/PadLayoutStore.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Models/ScanFolderStore.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Models/GameTweaksStore.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/EmulatorBridge.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/SwiftUIHost.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/AppState.swift
@@ -185,7 +195,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # Generate Info.plist with version from CMake
     configure_file("${CMAKE_SOURCE_DIR}/Info.plist.in" "${CMAKE_BINARY_DIR}/Info.plist" @ONLY)
 
-    add_executable(iPSX2 ios_main.mm iPSX2Bridge.mm ${SWIFT_SOURCES})
+    add_executable(iPSX2 ios_main.mm iPSX2Bridge.mm HostCpuQueue.cpp HostSettings.cpp HostGameList.mm HostSaveState.mm ${SWIFT_SOURCES})
     set_target_properties(iPSX2 PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.otti83.iPSX2"

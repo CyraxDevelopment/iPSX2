@@ -1,6 +1,525 @@
-
 // Set SDL_MAIN_HANDLED to prevent SDL from redefining main()
 #define SDL_MAIN_HANDLED
+
+#if defined(iPSX2_MACOS)
+// ============================================================================
+// [P63] macOS native build — full PCSX2 initialization + SDL Metal window
+// ============================================================================
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
+#import <Cocoa/Cocoa.h>
+#include <sys/stat.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <algorithm>
+
+#include "common/Console.h"
+#include "common/FileSystem.h"
+#include "common/Path.h"
+#include "common/WindowInfo.h"
+#include "pcsx2/VMManager.h"
+#include "pcsx2/Config.h"
+#include "pcsx2/Host.h"
+#include "pcsx2/GS/GS.h"
+#include "pcsx2/INISettingsInterface.h"
+#include "pcsx2/ImGui/ImGuiManager.h"
+#include "pcsx2/CDVD/CDVDcommon.h"
+#include "HostCpuQueue.h"
+#include "HostGameList.h"
+#include "GameListPaths.h"
+#include "OsdDefaults.h"
+
+// --- Global state ---
+static SDL_Window* s_macos_window = nullptr;
+static INISettingsInterface* s_macos_settings = nullptr;
+static std::atomic<bool> s_vm_running{false};
+static std::atomic<bool> s_vm_quit{false};
+
+// Host::AcquireRenderWindow — real implementation for macOS Metal
+namespace Host {
+    SDL_Window* g_sdl_window = nullptr;
+}
+
+std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window) {
+    if (!g_sdl_window) {
+        Console.Error("[P63] AcquireRenderWindow: g_sdl_window is NULL");
+        return std::nullopt;
+    }
+    WindowInfo wi = {};
+    wi.type = WindowInfo::Type::MacOS;
+
+    SDL_PropertiesID props = SDL_GetWindowProperties(g_sdl_window);
+    NSWindow* nswin = (__bridge NSWindow*)SDL_GetPointerProperty(props,
+        SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+    if (!nswin) {
+        Console.Error("[P63] AcquireRenderWindow: no NSWindow from SDL");
+        return std::nullopt;
+    }
+    wi.window_handle = (__bridge void*)[nswin contentView];
+
+    int w = 0, h = 0;
+    SDL_GetWindowSizeInPixels(g_sdl_window, &w, &h);
+    wi.surface_width = (u32)w;
+    wi.surface_height = (u32)h;
+    wi.surface_scale = SDL_GetWindowDisplayScale(g_sdl_window);
+
+    SDL_DisplayID display = SDL_GetDisplayForWindow(g_sdl_window);
+    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
+    wi.surface_refresh_rate = mode ? mode->refresh_rate : 60.0f;
+
+    Console.WriteLn("[P63] AcquireRenderWindow: %ux%u scale=%.2f",
+        wi.surface_width, wi.surface_height, wi.surface_scale);
+    return wi;
+}
+
+// --- Helper: setup directories ---
+static void SetupDirectories(const std::string& dataRoot) {
+    const char* dirs[] = {"bios", "iso", "logs", "memcards", "savestates",
+                          "snaps", "cheats", "patches", "cache", "covers",
+                          "gamesettings", "textures", "inputprofiles", "videos",
+                          "inis"};
+    mkdir(dataRoot.c_str(), 0755);
+    for (auto d : dirs)
+        mkdir((dataRoot + "/" + d).c_str(), 0755);
+
+    EmuFolders::DataRoot = dataRoot;
+    EmuFolders::AppRoot = dataRoot;
+    // [F6] Upstream keeps this at DataRoot/inis, and nothing here ever assigned it. An empty
+    // Settings makes every path derived from it resolve against the filesystem root — the log
+    // showed "Debugger Layouts Directory: /debuggerlayouts" — and it silently broke the game
+    // list's playtime.dat and custom_properties.ini plus relative DEV9 HDD paths.
+    EmuFolders::Settings = dataRoot + "/inis";
+    // [F3] Read-only runtime resources live in the .app bundle, not the user's data root.
+    // This used to point at dataRoot, so the bundled GameIndex.yaml was never read and GameDB
+    // only worked on machines where a copy had been placed in ~/Documents/iPSX2 by hand — a
+    // fresh checkout had an empty database. iOS already resolved this correctly; now both do.
+    if (NSString* rp = [[NSBundle mainBundle] resourcePath])
+        EmuFolders::Resources = [rp UTF8String];
+    else
+        EmuFolders::Resources = dataRoot;
+    EmuFolders::Bios = dataRoot + "/bios";
+    EmuFolders::Logs = dataRoot + "/logs";
+    EmuFolders::Savestates = dataRoot + "/savestates";
+    EmuFolders::MemoryCards = dataRoot + "/memcards";
+    EmuFolders::Snapshots = dataRoot + "/snaps";
+    EmuFolders::Cheats = dataRoot + "/cheats";
+    EmuFolders::Patches = dataRoot + "/patches";
+    EmuFolders::Cache = dataRoot + "/cache";
+    EmuFolders::Covers = dataRoot + "/covers";
+    EmuFolders::GameSettings = dataRoot + "/gamesettings";
+    EmuFolders::Textures = dataRoot + "/textures";
+    EmuFolders::InputProfiles = dataRoot + "/inputprofiles";
+    EmuFolders::Videos = dataRoot + "/videos";
+}
+
+// --- Helper: find BIOS in bios/ directory ---
+static bool FindAndConfigureBIOS(const std::string& biosDir) {
+    // Check existing config first
+    if (!EmuConfig.BaseFilenames.Bios.empty()) {
+        std::string path = Path::Combine(biosDir, EmuConfig.BaseFilenames.Bios);
+        if (FileSystem::FileExists(path.c_str())) {
+            Console.WriteLn("[P63] BIOS from config: %s", EmuConfig.BaseFilenames.Bios.c_str());
+            return true;
+        }
+    }
+    // Auto-scan for .bin files
+    FileSystem::FindResultsArray results;
+    if (FileSystem::FindFiles(biosDir.c_str(), "*", FILESYSTEM_FIND_FILES, &results)) {
+        for (const auto& fd : results) {
+            if (fd.Size >= 1024*1024 && fd.Size <= 50*1024*1024) {
+                std::string fn(Path::GetFileName(fd.FileName));
+                std::string ext = fn.size() >= 4 ? fn.substr(fn.size() - 4) : "";
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext == ".bin" || ext == ".rom") {
+                    EmuConfig.BaseFilenames.Bios = fn;
+                    if (s_macos_settings) {
+                        s_macos_settings->SetStringValue("Filenames", "BIOS", fn.c_str());
+                        s_macos_settings->Save();
+                    }
+                    Console.WriteLn("[P63] BIOS auto-detected: %s", fn.c_str());
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// --- Helper: initialize settings ---
+static void InitSettings(const std::string& dataRoot) {
+    std::string iniPath = dataRoot + "/PCSX2-macOS.ini";
+    s_macos_settings = new INISettingsInterface(iniPath);
+    if (!s_macos_settings->Load()) {
+        Console.WriteLn("[P63] Creating new config: %s", iniPath.c_str());
+        s_macos_settings->SetIntValue("EmuCore/CPU", "CoreType", 0);
+        s_macos_settings->SetBoolValue("EmuCore/CPU", "UseArm64Dynarec", false);
+        s_macos_settings->SetBoolValue("EmuCore/CPU/Recompiler", "EnableEE", true);
+        s_macos_settings->SetBoolValue("EmuCore/CPU/Recompiler", "EnableIOP", true);
+        s_macos_settings->SetBoolValue("EmuCore/CPU/Recompiler", "EnableVU0", true);
+        s_macos_settings->SetBoolValue("EmuCore/CPU/Recompiler", "EnableVU1", true);
+        s_macos_settings->SetBoolValue("EmuCore/CPU", "EnableSparseMemory", true);
+        // [JIT-OFF 2026-08-25] モードを明示的に書く。VMManager の fallback も iv2 になったので
+        // 書かなくても iv2 に落ちるが、それだと **INI が自分の構成を語らない**。計測ホストでは
+        // 「何で走っているか」がファイルから読めることが重要なので明示する
+        // (Hard Rule 5c = INI が唯一の source)。
+        // ★ macOS には iOS 側の jit→iv2 移行を入れていない。ここは計測ホストで、
+        //   jit アームを手で組めることに意味があるため。
+        s_macos_settings->SetStringValue("EmuCore/CPU", "EEMode", "iv2");
+        s_macos_settings->SetStringValue("EmuCore/CPU", "IOPMode", "iv2");
+        s_macos_settings->SetStringValue("EmuCore/CPU", "VU0Mode", "iv2");
+        s_macos_settings->SetStringValue("EmuCore/CPU", "VU1Mode", "iv2");
+        s_macos_settings->SetStringValue("SPU2/Output", "Backend", "SDL");
+        s_macos_settings->SetIntValue("EmuCore/GS", "VsyncQueueSize", 8);
+        s_macos_settings->SetBoolValue("EmuCore/Speedhacks", "vuThread", false); // MTVU off by default (Emulator > Experimental)
+        s_macos_settings->Save();
+    }
+    // [F8] Seed the directories GameList scans. Without an entry here GameList::Refresh walks
+    // nothing and s_entries stays empty however often it is called.
+    iPSX2::GameListPaths::Seed(s_macos_settings, dataRoot);
+    iPSX2::OsdDefaults::Seed(s_macos_settings);
+    s_macos_settings->Save();
+    Host::Internal::SetBaseSettingsLayer(s_macos_settings);
+}
+
+// --- Graphics メニュー: レンダラー選択 -------------------------------------------
+// なぜ要るか: GS のレンダラーは INI (`[EmuCore/GS] Renderer`) で決まるのに、macOS には
+// それを切り替える手段が無かった (メニューの "Renderer: Metal" は action:nil の飾り)。
+// iOS / Simulator は SwiftUI の Graphics 設定に picker があり
+// SettingsStore が同じ INI キーを書くので、これで 3 プラットフォームが揃う。
+//
+// 反映は iOS 側と同じく **再起動時**。実行中の GSreopen は CPU スレッドで行う必要があり、
+// メニュー (main スレッド) から直接叩くのは別作業として切る。
+@interface iPSX2RendererMenuTarget : NSObject
+- (void)selectRenderer:(NSMenuItem*)sender;
+@end
+
+@implementation iPSX2RendererMenuTarget
+- (void)selectRenderer:(NSMenuItem*)sender
+{
+	if (!s_macos_settings)
+		return;
+	const int value = static_cast<int>([sender tag]);
+	s_macos_settings->SetIntValue("EmuCore/GS", "Renderer", value);
+	s_macos_settings->Save();
+	// 同じ submenu 内の checkmark を張り替える
+	for (NSMenuItem* item in [[sender menu] itemArray])
+		[item setState:([item tag] == [sender tag]) ? NSControlStateValueOn : NSControlStateValueOff];
+	Console.WriteLn("@@CFG@@ GS Renderer -> %d (INI に保存。再起動で反映)", value);
+}
+@end
+
+static iPSX2RendererMenuTarget* s_renderer_menu_target = nil;
+
+// --- OSD title bar update ---
+#include "pcsx2/PerformanceMetrics.h"
+static std::string s_titlebar_game;
+
+static void UpdateWindowTitle() {
+    if (!s_macos_window) return;
+    char buf[256];
+    int fps = (int)PerformanceMetrics::GetFPS();
+    int speed = (int)PerformanceMetrics::GetSpeed();
+    if (!s_titlebar_game.empty())
+        snprintf(buf, sizeof(buf), "iPSX2 — %s | %d FPS | %d%%", s_titlebar_game.c_str(), fps, speed);
+    else
+        snprintf(buf, sizeof(buf), "iPSX2 — BIOS | %d FPS | %d%%", fps, speed);
+    SDL_SetWindowTitle(s_macos_window, buf);
+}
+
+// --- Build boot parameters from INI ---
+static VMBootParameters BuildBootParams() {
+    VMBootParameters bp;
+    bp.fast_boot = false;
+    std::string isoDir = EmuFolders::DataRoot + "/iso";
+    std::string isoFilename = s_macos_settings->GetStringValue("GameISO", "BootISO", "");
+    bool fastBoot = s_macos_settings->GetBoolValue("GameISO", "FastBoot", false);
+    if (!isoFilename.empty()) {
+        // [F8] See the iOS branch: game-list entries carry an absolute path.
+        std::string isoPath = Path::IsAbsolute(isoFilename) ? isoFilename : (isoDir + "/" + isoFilename);
+        if (!FileSystem::FileExists(isoPath.c_str())) {
+            std::string rootPath = EmuFolders::DataRoot + "/" + isoFilename;
+            if (FileSystem::FileExists(rootPath.c_str()))
+                isoPath = rootPath;
+        }
+        if (FileSystem::FileExists(isoPath.c_str())) {
+            bp.filename = isoPath;
+            bp.source_type = CDVD_SourceType::Iso;
+            bp.fast_boot = fastBoot;
+            Console.WriteLn("[P63] ISO: %s fast_boot=%d", isoPath.c_str(), fastBoot);
+        }
+    }
+    // [P101-9 dev] load a save-state on boot (resume the user's captured scene for HLE capture/coverage).
+    if (const char* st = std::getenv("iPSX2_LOAD_STATE")) {
+        if (FileSystem::FileExists(st)) { bp.save_state = st; Console.WriteLn("[P63] LOAD_STATE: %s", st); }
+        else Console.Error("[P63] LOAD_STATE not found: %s", st);
+    }
+    return bp;
+}
+
+// --- VM thread (persistent, with restart support) ---
+static void VMThreadFunc() {
+    Console.WriteLn("[P63] VM thread: CPUThreadInitialize...");
+    if (!VMManager::Internal::CPUThreadInitialize()) {
+        Console.Error("[P63] CPUThreadInitialize failed!");
+        s_vm_running.store(false);
+        return;
+    }
+
+    // Set ImGui font path
+    std::string fontPath = Path::Combine(EmuFolders::Resources, "fonts/Roboto-Regular.ttf");
+    if (!FileSystem::FileExists(fontPath.c_str()))
+        fontPath = Path::Combine(EmuFolders::DataRoot, "fonts/Roboto-Regular.ttf");
+    ImGuiManager::SetFontPathAndRange(std::move(fontPath), {});
+
+    // Persistent boot loop — handles VM restart after PS2LOGO→game transitions
+    while (!s_vm_quit.load()) {
+        if (EmuConfig.BaseFilenames.Bios.empty() ||
+            !FileSystem::FileExists(Path::Combine(EmuFolders::Bios, EmuConfig.BaseFilenames.Bios).c_str())) {
+            Console.Error("[P63] BIOS not found!");
+            break;
+        }
+
+        VMBootParameters boot_params = BuildBootParams();
+        Console.WriteLn("[P63] Booting with BIOS=%s", EmuConfig.BaseFilenames.Bios.c_str());
+
+        if (VMManager::Initialize(boot_params)) {
+            Console.WriteLn("[P63] VM initialized, entering run loop...");
+            VMManager::SetState(VMState::Running);
+
+            // Update title with game name
+            s_titlebar_game = s_macos_settings->GetStringValue("GameISO", "BootISO", "");
+
+            while (!s_vm_quit.load()) {
+                VMState state = VMManager::GetState();
+                if (state == VMState::Stopping || state == VMState::Shutdown)
+                    break;
+                if (state == VMState::Running)
+                    VMManager::Execute();
+                else
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+
+            Console.WriteLn("[P63] VM run loop exited (state=%d, quit=%d)",
+                (int)VMManager::GetState(), s_vm_quit.load() ? 1 : 0);
+
+            if (!s_vm_quit.load()) {
+                // VM stopped but app still running — restart (PS2LOGO→game transition)
+                Console.WriteLn("[P63] VM restarting...");
+                VMManager::Shutdown(false);
+                continue;
+            }
+
+            VMManager::Shutdown(false);
+        } else {
+            Console.Error("[P63] VMManager::Initialize failed!");
+        }
+        break;
+    }
+
+    VMManager::Internal::CPUThreadShutdown();
+    s_vm_running.store(false);
+    Console.WriteLn("[P63] VM thread exited.");
+}
+
+// --- macOS main ---
+int main(int argc, char* argv[]) {
+    @autoreleasepool {
+        // 1. Data root
+        const char* home = getenv("HOME");
+        std::string dataRoot = std::string(home ? home : "/tmp") + "/Documents/iPSX2";
+        SetupDirectories(dataRoot);
+
+        // 2. Logging
+        std::string logPath = dataRoot + "/pcsx2_log.txt";
+        freopen(logPath.c_str(), "w", stderr);
+        dup2(fileno(stderr), fileno(stdout));
+        setvbuf(stderr, NULL, _IONBF, 0);
+        setvbuf(stdout, NULL, _IONBF, 0);
+
+        fprintf(stderr, "[P63] iPSX2 macOS native build starting...\n");
+        fprintf(stderr, "[P63] DataRoot: %s\n", dataRoot.c_str());
+        fprintf(stderr, "[P63] Log: %s\n", logPath.c_str());
+
+        // 3. Settings
+        InitSettings(dataRoot);
+        VMManager::Internal::LoadStartupSettings();
+        // [F8] Default OFF; see HostGameList.mm. Runs before any VM exists, which is required
+        // because scanning reassigns the global CDVD reader.
+        iPSX2::MaybeRunDiagnosticGameListScan();
+        VMManager::ApplySettings();
+
+        // 4. BIOS
+        if (!FindAndConfigureBIOS(EmuFolders::Bios)) {
+            fprintf(stderr, "[P63] ERROR: No BIOS found in %s/bios/\n", dataRoot.c_str());
+            fprintf(stderr, "[P63] Copy a PS2 BIOS .bin file there and restart.\n");
+            // Still open window to show the user something
+        }
+
+        // 5. SDL + Window
+        SDL_SetMainReady();
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD) < 0) {
+            fprintf(stderr, "[P63] SDL_Init failed: %s\n", SDL_GetError());
+            return 1;
+        }
+        // [HEADLESS] iPSX2_HEADLESS=1 creates the window HIDDEN (no on-screen window) for
+        // autonomous/background runs (e.g. HLE kernel dev: self-check compares GIF packet
+        // bytes and does not need on-screen rendering). Pair with INI Renderer=11 (Null) to
+        // also skip the GPU. Default (unset) = normal visible window.
+        Uint32 s_win_flags = SDL_WINDOW_METAL | SDL_WINDOW_RESIZABLE;
+        const bool s_headless = (std::getenv("iPSX2_HEADLESS") != nullptr);
+        if (s_headless) s_win_flags |= SDL_WINDOW_HIDDEN;
+        s_macos_window = SDL_CreateWindow("iPSX2 macOS", 1280, 720, s_win_flags);
+        if (!s_macos_window) {
+            fprintf(stderr, "[P63] SDL_CreateWindow failed: %s\n", SDL_GetError());
+            return 1;
+        }
+        Host::g_sdl_window = s_macos_window;
+        // [HEADLESS] drop Dock icon / focus-stealing so background runs are unobtrusive.
+        if (s_headless)
+            [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+        Console.WriteLn(s_headless ? "[P63] SDL window created (HEADLESS/hidden)." : "[P63] SDL window created.");
+
+        // 6. Setup macOS native menu bar
+        @autoreleasepool {
+            NSMenu* menuBar = [[NSMenu alloc] init];
+
+            // App menu
+            NSMenuItem* appMenuItem = [[NSMenuItem alloc] init];
+            NSMenu* appMenu = [[NSMenu alloc] initWithTitle:@"iPSX2"];
+            [appMenu addItemWithTitle:@"About iPSX2" action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
+            [appMenu addItem:[NSMenuItem separatorItem]];
+            [appMenu addItemWithTitle:@"Quit iPSX2" action:@selector(terminate:) keyEquivalent:@"q"];
+            [appMenuItem setSubmenu:appMenu];
+            [menuBar addItem:appMenuItem];
+
+            // Emulation menu
+            NSMenuItem* emuMenuItem = [[NSMenuItem alloc] init];
+            NSMenu* emuMenu = [[NSMenu alloc] initWithTitle:@"Emulation"];
+            [emuMenu addItemWithTitle:@"Pause / Resume" action:nil keyEquivalent:@"p"];
+            [emuMenu addItemWithTitle:@"Reset" action:nil keyEquivalent:@"r"];
+            [emuMenu addItem:[NSMenuItem separatorItem]];
+            // CPU settings submenu
+            NSMenuItem* cpuItem = [[NSMenuItem alloc] init];
+            NSMenu* cpuMenu = [[NSMenu alloc] initWithTitle:@"CPU"];
+            [cpuMenu addItemWithTitle:@"EE: JIT Recompiler" action:nil keyEquivalent:@""];
+            [cpuMenu addItemWithTitle:@"EE: Interpreter" action:nil keyEquivalent:@""];
+            [cpuMenu addItem:[NSMenuItem separatorItem]];
+            [cpuMenu addItemWithTitle:@"IOP Recompiler" action:nil keyEquivalent:@""];
+            [cpuMenu addItemWithTitle:@"VU0 Recompiler" action:nil keyEquivalent:@""];
+            [cpuMenu addItemWithTitle:@"VU1 Recompiler" action:nil keyEquivalent:@""];
+            [cpuItem setSubmenu:cpuMenu];
+            [emuMenu addItem:cpuItem];
+            // Speedhacks submenu
+            NSMenuItem* hackItem = [[NSMenuItem alloc] init];
+            NSMenu* hackMenu = [[NSMenu alloc] initWithTitle:@"Speed Hacks"];
+            [hackMenu addItemWithTitle:@"MTVU (Multi-Threaded VU1)" action:nil keyEquivalent:@""];
+            [hackMenu addItemWithTitle:@"Instant VU1" action:nil keyEquivalent:@""];
+            [hackMenu addItemWithTitle:@"Fastmem" action:nil keyEquivalent:@""];
+            [hackItem setSubmenu:hackMenu];
+            [emuMenu addItem:hackItem];
+            [emuMenuItem setSubmenu:emuMenu];
+            [menuBar addItem:emuMenuItem];
+
+            // GS menu
+            NSMenuItem* gsMenuItem = [[NSMenuItem alloc] init];
+            NSMenu* gsMenu = [[NSMenu alloc] initWithTitle:@"Graphics"];
+            // Renderer 選択 (INI `[EmuCore/GS] Renderer`。反映は再起動時)
+            if (!s_renderer_menu_target)
+                s_renderer_menu_target = [[iPSX2RendererMenuTarget alloc] init];
+            const int cur_renderer = s_macos_settings ?
+                s_macos_settings->GetIntValue("EmuCore/GS", "Renderer", 17) : 17;
+            NSMenuItem* rendItem = [[NSMenuItem alloc] init];
+            [rendItem setTitle:@"Renderer (restart to apply)"];
+            NSMenu* rendMenu = [[NSMenu alloc] initWithTitle:@"Renderer"];
+            const struct { const char* title; int tag; } renderers[] = {
+                {"Metal (Hardware)", 17}, {"Software", 13}, {"Null (No Output)", 11},
+            };
+            for (const auto& r : renderers)
+            {
+                NSMenuItem* it = [rendMenu addItemWithTitle:[NSString stringWithUTF8String:r.title]
+                                                     action:@selector(selectRenderer:)
+                                              keyEquivalent:@""];
+                [it setTag:r.tag];
+                [it setTarget:s_renderer_menu_target];
+                [it setState:(r.tag == cur_renderer) ? NSControlStateValueOn : NSControlStateValueOff];
+            }
+            [rendItem setSubmenu:rendMenu];
+            [gsMenu addItem:rendItem];
+            [gsMenu addItem:[NSMenuItem separatorItem]];
+            [gsMenu addItemWithTitle:@"Show FPS" action:nil keyEquivalent:@""];
+            [gsMenu addItemWithTitle:@"Show CPU Usage" action:nil keyEquivalent:@""];
+            [gsMenuItem setSubmenu:gsMenu];
+            [menuBar addItem:gsMenuItem];
+
+            // Window menu
+            NSMenuItem* winMenuItem = [[NSMenuItem alloc] init];
+            NSMenu* winMenu = [[NSMenu alloc] initWithTitle:@"Window"];
+            [winMenu addItemWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+            [winMenu addItemWithTitle:@"Zoom" action:@selector(performZoom:) keyEquivalent:@""];
+            [winMenu addItem:[NSMenuItem separatorItem]];
+            [winMenu addItemWithTitle:@"Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"];
+            [winMenuItem setSubmenu:winMenu];
+            [menuBar addItem:winMenuItem];
+
+            [NSApp setMainMenu:menuBar];
+        }
+
+        // 7. Launch VM thread (if BIOS found)
+        std::thread vmThread;
+        if (!EmuConfig.BaseFilenames.Bios.empty()) {
+            s_vm_running.store(true);
+            vmThread = std::thread(VMThreadFunc);
+        }
+
+        // 8. Main event loop (must run on main thread for Cocoa/Metal)
+        bool running = true;
+        uint32_t titleUpdateCounter = 0;
+        while (running) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                switch (event.type) {
+                    case SDL_EVENT_QUIT:
+                        running = false;
+                        break;
+                    case SDL_EVENT_WINDOW_RESIZED: {
+                        int w = event.window.data1, h = event.window.data2;
+                        Console.WriteLn("[P63] Window resized: %dx%d", w, h);
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            // Update window title bar with OSD info (~1Hz)
+            if (++titleUpdateCounter >= 60) {
+                titleUpdateCounter = 0;
+                UpdateWindowTitle();
+            }
+
+            // Check if VM thread has exited
+            if (!s_vm_running.load() && vmThread.joinable()) {
+                // VM finished — don't quit the app, let user close window
+            }
+
+            SDL_Delay(16);
+        }
+
+        // 9. Shutdown
+        Console.WriteLn("[P63] Quit requested, shutting down...");
+        s_vm_quit.store(true);
+        if (vmThread.joinable())
+            vmThread.join();
+
+        SDL_DestroyWindow(s_macos_window);
+        SDL_Quit();
+        Console.WriteLn("[P63] Clean exit.");
+        return 0;
+    }
+}
+#else // TARGET_OS_IPHONE — original iOS code below
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -22,6 +541,9 @@
 #include <iostream>
 
 #include "common/ProgressCallback.h"
+#include "GameListPaths.h"
+#include "OsdDefaults.h"
+#include "BiosIntake.h"
 #include "pcsx2/Input/InputManager.h"
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/SIO/Pad/PadDualshock2.h"
@@ -34,6 +556,7 @@
 #include "pcsx2/VMManager.h"
 #include "pcsx2/ImGui/ImGuiManager.h"
 #include "pcsx2/Config.h"
+#include "HostCpuQueue.h"
 #include "pcsx2/CDVD/CDVD.h"
 #include "pcsx2/CDVD/CDVDcommon.h"
 
@@ -59,8 +582,6 @@ struct rc_client_t;
 #import <UIKit/UIKit.h>
 #include <mach-o/dyld.h>
 #include "common/Darwin/DarwinMisc.h" // For iPSX2_CRASH_DIAG
-#include "3rdparty/simpleini/include/SimpleIni.h"
-#include "pcsx2/INISettingsInterface.h"
 
 // Global Log View
 static UITextView* g_logView = nil;
@@ -69,7 +590,10 @@ static UITextView* g_logView = nil;
 // Game render view with CAMetalLayer as backing layer (like MTKView)
 // Game render view — backing layer (CAMetalLayer), manual landscape toggle
 #include "pcsx2/MTGS.h"
-extern void GSResizeDisplayWindow(int width, int height, float scale);
+// [iPSX2] 宣言をここで手書きすると上流の署名変更に追随できない
+// (実際に上流が `int width, int height` → `u32` に変えてリンクエラーになった)。
+// 本来の宣言元を include する。
+#include "pcsx2/GS/GS.h"
 
 @interface iPSX2GameView : UIView
 @end
@@ -93,240 +617,22 @@ extern void GSResizeDisplayWindow(int width, int height, float scale);
 iPSX2GameView* g_gameRenderView = nil;  // non-static: accessed from iPSX2Bridge.mm
 
 // Touch pad state
-std::atomic<bool> g_touchPadState[64] = {};
+bool g_touchPadState[64] = {};
 
 // Persistent VM thread lifecycle
 static std::atomic<bool> s_vmThreadActive{false};   // true while VM is executing
-static std::atomic<bool> s_requestVMStop{false};    // signal VM to stop from UI
-static std::atomic<bool> s_requestVMBoot{false};    // signal VM thread to boot
+std::atomic<bool> s_requestVMStop{false};     // signal VM to stop from UI (extern for iPSX2Bridge)
+static std::atomic<bool> s_requestVMBoot{false};     // signal VM thread to boot
 static std::mutex s_vmMutex;
 static std::condition_variable s_vmCV;
-static std::atomic<bool> s_vmThreadCreated{false};
-static std::atomic<bool> s_requestAppExit{false};
-std::mutex g_settingsMutex;
+static bool s_vmThreadCreated = false;               // guarded by s_vmMutex
 
-extern "C" bool VMController_IsStopRequested() {
-    return s_requestVMStop.load();
-}
+// Gamepad button mapping — 16 PS2 buttons → SDL_GamepadButton
+std::atomic<bool> s_captureMode{false};
+std::atomic<int>  s_capturedButton{-1};
 
-@interface VMController : NSObject
-+ (instancetype)sharedInstance;
-- (BOOL)isVMRunning;
-- (BOOL)isVMThreadActive;
-- (void)requestVMBoot;
-- (void)requestVMShutdown;
-- (void)startVMThread;
-@end
-
-@implementation VMController
-
-+ (instancetype)sharedInstance {
-    static VMController *shared = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        shared = [[self alloc] init];
-    });
-    return shared;
-}
-
-- (BOOL)isVMRunning {
-    return s_vmThreadActive.load();
-}
-
-- (BOOL)isVMThreadActive {
-    return s_vmThreadActive.load();
-}
-
-- (void)requestVMBoot {
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2RequestVMBoot" object:nil];
-}
-
-- (void)requestVMShutdown {
-    s_requestVMStop.store(true);
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2RequestVMShutdown" object:nil];
-}
-
-- (void)startVMThread {
-    std::unique_lock<std::mutex> lk(s_vmMutex);
-
-    if (s_vmThreadActive.load()) {
-        Console.WriteLn("[VM] startVMThread: VM already active, ignoring");
-        return;
-    }
-
-    s_requestVMBoot.store(true);
-    s_requestVMStop.store(false);
-
-    if (s_vmThreadCreated.exchange(true)) {
-        // Thread already exists — wake it
-        Console.WriteLn("[VM] startVMThread: signaling existing VM thread");
-        lk.unlock();
-        s_vmCV.notify_one();
-        return;
-    }
-
-    // First call: create thread while still holding the lock so the new
-    // thread blocks on s_vmCV.wait() before we release.
-    Console.WriteLn("[VM] Creating persistent VM thread...");
-
-    std::thread vmThread([]() {
-        // === ONE-TIME INIT (runs once per app lifetime) ===
-        Console.WriteLn("[VM] VM Thread: CPUThreadInitialize (once)...");
-        if (!VMManager::Internal::CPUThreadInitialize()) {
-            Console.Error("VM Thread: CPUThreadInitialize failed.");
-            s_vmThreadCreated.store(false);
-            return;
-        }
-
-        // Set ImGui font path (once)
-        std::string fontPath = Path::Combine(EmuFolders::Resources, "fonts/Roboto-Regular.ttf");
-        ImGuiManager::SetFontPathAndRange(std::move(fontPath), {});
-
-        // === PERSISTENT BOOT LOOP ===
-        bool auto_boot_first = (getenv("iPSX2_AUTO_BOOT") && atoi(getenv("iPSX2_AUTO_BOOT")) == 1)
-                            || (getenv("iPSX2_BOOT_ELF") != nullptr);
-        while (true) {
-            if (s_requestAppExit.load()) break;
-            // Wait for boot signal (or auto-boot on first iteration)
-            {
-                std::unique_lock<std::mutex> lk(s_vmMutex);
-                if (auto_boot_first) {
-                    Console.WriteLn("[AutoBoot] @@AUTO_BOOT@@ skipping UI wait, auto-boot enabled");
-                    auto_boot_first = false;
-                } else {
-                    Console.WriteLn("[VM] VM Thread: waiting for boot request...");
-                    s_vmCV.wait(lk, [] { return s_requestVMBoot.load(); });
-                }
-                s_requestVMBoot.store(false);
-            }
-
-            Console.WriteLn("[VM] VM Thread: boot signal received, preparing boot params...");
-            s_vmThreadActive.store(true);
-
-            // --- Build boot parameters from INI ---
-            VMBootParameters boot_params;
-            boot_params.fast_boot = false;
-            {
-                std::string isoDir = EmuFolders::DataRoot + "/iso";
-                std::string defaultISO = "";
-                // Access global settings interface for configuration
-                extern INISettingsInterface* g_p44_settings_interface;
-                extern std::mutex g_settingsMutex;
-                std::string isoFilename = "";
-                bool fastBoot = false;
-                {
-                    std::lock_guard<std::mutex> lk(g_settingsMutex);
-                    if (g_p44_settings_interface) {
-                        isoFilename = g_p44_settings_interface->GetStringValue("GameISO", "BootISO", defaultISO.c_str());
-                        fastBoot = g_p44_settings_interface->GetBoolValue("GameISO", "FastBoot", false);
-                        g_p44_settings_interface->SetStringValue("GameISO", "BootISO", isoFilename.c_str());
-                        g_p44_settings_interface->SetBoolValue("GameISO", "FastBoot", fastBoot);
-                        g_p44_settings_interface->Save();
-                    }
-                }
-                std::string isoPath = isoDir + "/" + isoFilename;
-                // Fallback: check Documents/ root if not found in iso/
-                if (!isoFilename.empty() && !FileSystem::FileExists(isoPath.c_str())) {
-                    std::string rootPath = EmuFolders::DataRoot + "/" + isoFilename;
-                    if (FileSystem::FileExists(rootPath.c_str())) {
-                        isoPath = rootPath;
-                        Console.WriteLn("ISO found in Documents/ root: %s", isoPath.c_str());
-                    }
-                }
-                if (!isoFilename.empty() && FileSystem::FileExists(isoPath.c_str())) {
-                    std::string suffix = isoFilename.size() >= 4 ? isoFilename.substr(isoFilename.size() - 4) : "";
-                    std::transform(suffix.begin(), suffix.end(), suffix.begin(), ::tolower);
-                    bool isElf = (suffix == ".elf");
-                    if (isElf) {
-                        boot_params.elf_override = isoPath;
-                        boot_params.source_type = CDVD_SourceType::NoDisc;
-                        boot_params.fast_boot = true;
-                        Console.WriteLn("@@ISO_BOOT@@ path=%s fast_boot=1 mode=ELF (INI: %s)", isoPath.c_str(), isoFilename.c_str());
-                    } else {
-                        boot_params.filename = isoPath;
-                        boot_params.source_type = CDVD_SourceType::Iso;
-                        boot_params.fast_boot = fastBoot;
-                        Console.WriteLn("@@ISO_BOOT@@ path=%s fast_boot=%d (INI: %s)", isoPath.c_str(), fastBoot ? 1 : 0, isoFilename.c_str());
-                    }
-                } else {
-                    Console.WriteLn("@@ISO_BOOT@@ no ISO='%s', falling back to BIOS only", isoFilename.c_str());
-                }
-            }
-
-            if (getenv("iPSX2_AUTO_BOOT_BIOS")) {
-                Console.WriteLn("@@AUTO_BOOT_BIOS@@ enabled=1 action=triggered");
-                boot_params.fast_boot = false;
-            }
-            // ps2autotests: boot ELF directly via env var
-            if (const char* testElf = getenv("iPSX2_BOOT_ELF")) {
-                boot_params.elf_override = testElf;
-                boot_params.source_type = CDVD_SourceType::NoDisc;
-                boot_params.fast_boot = true;
-                Console.WriteLn("@@BOOT_ELF@@ elf=%s", testElf);
-            }
-
-            // BIOS sanity check
-            if (EmuConfig.BaseFilenames.Bios.empty() || !FileSystem::FileExists(Path::Combine(EmuFolders::Bios, EmuConfig.BaseFilenames.Bios).c_str())) {
-                Console.Error("CRITICAL: BIOS verification failed inside VM thread.");
-                Host::ReportErrorAsync("BIOS Error", "Validation failed.");
-                s_vmThreadActive.store(false);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2VMDidShutdown" object:nil];
-                });
-                continue; // back to wait loop
-            }
-
-            // --- Initialize & Execute VM ---
-            if (VMManager::Initialize(boot_params)) {
-                Console.WriteLn("[VM] VM initialized successfully");
-                VMManager::SetState(VMState::Running);
-
-                while (true) {
-                    if (VMController_IsStopRequested()) {
-                        Console.WriteLn("[VM] VM Thread: stop requested from UI.");
-                        break;
-                    }
-                    VMState state = VMManager::GetState();
-                    if (state == VMState::Stopping || state == VMState::Shutdown) {
-                        Console.WriteLn("[VM] VM Thread: shutdown signal received.");
-                        break;
-                    } else if (state == VMState::Running) {
-                        VMManager::Execute();
-                    } else {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                    }
-                }
-
-                Console.WriteLn("[VM] VM Thread: shutting down VM...");
-                VMManager::Shutdown(false);
-            } else {
-                Console.Error("VM Thread: VMManager::Initialize failed!");
-                Host::ReportErrorAsync("Startup Error", "VM Initialization Failed.");
-            }
-
-            // --- Post-shutdown: reset state, notify UI ---
-            s_vmThreadActive.store(false);
-            s_requestVMStop.store(false);
-            Console.WriteLn("[VM] VM Thread: shutdown complete, posting notification");
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2VMDidShutdown" object:nil];
-            });
-        } // end while(true) boot loop
-
-        VMManager::Internal::CPUThreadShutdown();
-        Console.WriteLn("[VM] VM Thread: CPUThreadShutdown called, thread exiting.");
-    });
-    vmThread.detach();
-}
-
-@end
-
-// Gamepad button mapping
-#include "GamepadMapper.h"
-
-std::atomic<bool> GamepadMapper::captureMode{false};
-std::atomic<int>  GamepadMapper::capturedButton{-1};
-int GamepadMapper::buttonMap[16] = {
+// Default mapping: PS2 index → SDL_GamepadButton
+int s_buttonMap[16] = {
     SDL_GAMEPAD_BUTTON_DPAD_UP,        // 0  PAD_UP
     SDL_GAMEPAD_BUTTON_DPAD_DOWN,      // 1  PAD_DOWN
     SDL_GAMEPAD_BUTTON_DPAD_LEFT,      // 2  PAD_LEFT
@@ -354,22 +660,6 @@ const int s_defaultMap[16] = {
     SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_BUTTON_BACK,
     SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK,
 };
-
-void GamepadMapper::ResetToDefaults() {
-    for (int i = 0; i < 16; i++) buttonMap[i] = s_defaultMap[i];
-}
-
-void GamepadMapper::SetMapping(int ps2Index, int sdlButton) {
-    if (ps2Index >= 0 && ps2Index < 16) {
-        buttonMap[ps2Index] = sdlButton;
-    }
-}
-
-int GamepadMapper::GetMapping(int ps2Index) {
-    if (ps2Index >= 0 && ps2Index < 16) return buttonMap[ps2Index];
-    return -1;
-}
-
 
 // View controller references for background color switching
 static UIViewController* __unsafe_unretained s_menuVC = nil;
@@ -400,7 +690,6 @@ void LogToScreen(const char* str) {
 namespace Host
 {
     SDL_Window* g_sdl_window = nullptr;
-    static SDL_Gamepad* s_gamepad = nullptr;
 
     void RequestShutdown() {
         SDL_Event event;
@@ -475,19 +764,6 @@ namespace Host
             CGFloat scale = renderView.contentScaleFactor;
             wi.surface_width = static_cast<u32>(renderView.bounds.size.width * scale);
             wi.surface_height = static_cast<u32>(renderView.bounds.size.height * scale);
-            // [BLACK-SCREEN-FIX] If the view hasn't been laid out yet (CGRectZero), fall back to
-            // screen native bounds. AttachSurfaceOnMainThread uses surface_width/height to set
-            // CAMetalLayer.drawableSize; a zero size makes nextDrawable return nil permanently
-            // because ResizeWindow early-returns when m_layer is null (device not yet created),
-            // so the zero gets "baked in" by AttachSurfaceOnMainThread. layoutSubviews will call
-            // GSResizeDisplayWindow with the correct size once the view is in the hierarchy.
-            if (wi.surface_width == 0 || wi.surface_height == 0) {
-                CGRect nativeBounds = [UIScreen mainScreen].nativeBounds;
-                wi.surface_width = static_cast<u32>(nativeBounds.size.width);
-                wi.surface_height = static_cast<u32>(nativeBounds.size.height);
-                Console.WriteLn("Host::AcquireRenderWindow: View not yet laid out; using screen native bounds %ux%u",
-                    wi.surface_width, wi.surface_height);
-            }
             wi.surface_scale = SDL_GetWindowDisplayScale(g_sdl_window);
             
             SDL_DisplayID display = SDL_GetDisplayForWindow(g_sdl_window);
@@ -513,37 +789,21 @@ namespace Host
     bool IsFullscreen() { return true; }
     void SetMouseMode(bool, bool) {}
     void OnGameChanged(const std::string&, const std::string&, const std::string&, const std::string&, unsigned int, unsigned int) {}
-    void OnVMDestroyed() {}
+    // [F1] Drop anything still queued for a CPU thread that no longer exists.
+    void OnVMDestroyed() { iPSX2::ResetCPUThreadQueue(); }
     void SetFullscreen(bool) {}
     void BeginTextInput() {}
     bool ConfirmMessage(std::string_view, std::string_view) { return true; }
-    void RunOnCPUThread(std::function<void()>, bool) {}
+    // [F1] Host::RunOnCPUThread now lives in HostCpuQueue.cpp (shared by both Apple targets).
     void ReportInfoAsync(std::string_view, std::string_view) {}
     void ReportErrorAsync(std::string_view title, std::string_view msg) {
         Console.Error("Host::ReportErrorAsync: %s - %s", std::string(title).c_str(), std::string(msg).c_str());
-        NSString *nsTitle = [NSString stringWithUTF8String:std::string(title).c_str()];
-        NSString *nsMsg = [NSString stringWithUTF8String:std::string(msg).c_str()];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            // Re-read on main thread — s_rootVC is only ever set on main thread.
-            UIViewController* vc = s_rootVC;
-            if (!vc) return;
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:nsTitle
-                                                                           message:nsMsg
-                                                                    preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-            [vc presentViewController:alert animated:YES completion:nil];
-        });
     }
-    void OnSaveStateSaved(std::string_view) {}
-    void OnSaveStateLoaded(std::string_view, bool) {}
     void BeginPresentFrame() {}
-    void OnSaveStateLoading(std::string_view) {}
     bool LocaleCircleConfirm() { return false; }
 
-    void RefreshGameListAsync(bool) {}
     bool RequestResetSettings(bool, bool, bool, bool, bool) { return true; }
-    void CancelGameListRefresh() {}
+// [F8] Host::RefreshGameListAsync / CancelGameListRefresh now live in HostGameList.mm.
     void RequestVMShutdown(bool, bool, bool) {}
     void RequestExitBigPicture() {}
     void OnInputDeviceConnected(std::string_view, std::string_view) {}
@@ -552,8 +812,12 @@ namespace Host
     void OnAchievementsRefreshed() {}
     void PumpMessagesOnCPUThread()
     {
+        // [F1] Must stay first: every path below can return early, and a drain placed after one
+        // of them would never run again for the rest of the session.
+        iPSX2::DrainCPUThreadTasks();
+
 // Check for VM shutdown request (safe: runs on CPU thread)
-        if (VMController_IsStopRequested()) {
+        if (s_requestVMStop.load()) {
             Console.WriteLn("[UI] PumpMessages: setting VM state to Stopping");
             VMManager::SetState(VMState::Stopping);
             return;
@@ -596,6 +860,7 @@ namespace Host
 
         // MFi / External gamepad support via SDL3
         {
+            static SDL_Gamepad* s_gamepad = nullptr;
             // Auto-detect: open first available gamepad if not already open
             if (!s_gamepad) {
                 int count = 0;
@@ -616,10 +881,10 @@ namespace Host
             if (s_gamepad) {
                 SDL_UpdateGamepads();
                 // Capture mode: detect any pressed button for remapping UI
-                if (GamepadMapper::captureMode.load()) {
+                if (s_captureMode.load()) {
                     for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++) {
                         if (SDL_GetGamepadButton(s_gamepad, (SDL_GamepadButton)b)) {
-                            GamepadMapper::capturedButton.store(b);
+                            s_capturedButton.store(b);
                             break;
                         }
                     }
@@ -636,7 +901,7 @@ namespace Host
                     PadDualshock2::Inputs::PAD_L3, PadDualshock2::Inputs::PAD_R3,
                 };
                 for (int i = 0; i < 16; i++) {
-                    int sdlBtn = GamepadMapper::GetMapping(i);
+                    int sdlBtn = s_buttonMap[i];
                     if (sdlBtn < 0) continue; // analog trigger
                     bool pressed = SDL_GetGamepadButton(s_gamepad, (SDL_GamepadButton)sdlBtn);
                     if (pressed)
@@ -670,9 +935,53 @@ namespace Host
                 pad->Set(PadDualshock2::Inputs::PAD_R_UP,    ry < 0 ? -ry : 0.0f);
             }
         }
+
+        // [BIOS_NAV] Auto-navigate BIOS — debug only
+#if DEBUG
+        if (const char* nav = getenv("iPSX2_BIOS_NAV"); nav && atoi(nav))
+        {
+            unsigned int fc = ::g_FrameCount;
+            auto press = [&](u32 btn, unsigned int at) {
+                if (fc >= at && fc <= at + 1) pad->Set(btn, 1.0f);
+                else if (fc == at + 2) pad->Set(btn, 0.0f);
+            };
+            // BIOS nav: ↓ → ○ → ○ → ○ → ← → ○ → ○...
+            // The exact screen order varies. Try multiple ←+○ combos.
+            press(PadDualshock2::Inputs::PAD_DOWN, 600);
+            press(PadDualshock2::Inputs::PAD_CIRCLE, 750);
+            // After entering System Configuration, each screen needs ○ to advance.
+            // The "initialization" dialog needs ← first to select "Yes".
+            // Try ← before each ○ to handle wherever the dialog appears.
+            unsigned int seq[] = {
+                950,  0,  // ○ language
+                1150, 0,  // ○ clock
+                1350, 1,  // ← then ○ (init dialog attempt 1)
+                1550, 1,  // ← then ○ (init dialog attempt 2)
+                1750, 0,  // ○
+                1950, 0,  // ○
+                2150, 1,  // ← then ○ (attempt 3)
+                2350, 0,  // ○
+                2550, 0, 2750, 0, 2950, 0, 3150, 0, 3350, 0, 3550, 0,
+            };
+            for (int i = 0; i < (int)(sizeof(seq)/sizeof(seq[0])); i += 2) {
+                unsigned int t = seq[i];
+                if (seq[i+1]) // needs LEFT first
+                    press(PadDualshock2::Inputs::PAD_LEFT, t);
+                press(PadDualshock2::Inputs::PAD_CIRCLE, t + (seq[i+1] ? 100 : 0));
+            }
+
+            // Log after each step
+            static const unsigned int cps[] = {650, 770, 950, 1130, 1300, 1500, 1800, 2100, 2400, 2700, 3000};
+            for (auto cp : cps) {
+                if (fc == cp) {
+                    Console.WriteLn(Color_Yellow, "[BIOS_NAV] checkpoint f=%u", fc);
+                }
+            }
+        }
+#endif // DEBUG — BIOS_NAV
     }
     std::string TranslatePluralToString(const char*, const char*, const char*, int) { return ""; }
-    void CommitBaseSettingChanges() {}
+// [F2] Host::CommitBaseSettingChanges now lives in HostSettings.cpp (shared by both Apple targets).
     void OnInputDeviceDisconnected(InputBindingKey, std::string_view) {}
     void OpenHostFileSelectorAsync(std::string_view, bool, std::function<void(const std::string&)>, std::vector<std::string>, std::string_view) {}
     std::unique_ptr<ProgressCallback> CreateHostProgressCallback() { return nullptr; }
@@ -695,12 +1004,6 @@ namespace Host::Internal
 extern "C" void iPSX2_SetSDLFullscreen(bool enabled) {
     if (Host::g_sdl_window)
         SDL_SetWindowFullscreen(Host::g_sdl_window, enabled);
-}
-
-// Returns the gamepad handle opened by PumpMessagesOnCPUThread (or nullptr if none).
-// Bridge uses this for capture-mode polling to avoid a duplicate open.
-extern "C" SDL_Gamepad* iPSX2_GetActiveGamepad() {
-    return Host::s_gamepad;
 }
 
 namespace Common {
@@ -733,7 +1036,7 @@ namespace InputManager {
 }
 
 // ... HTTP Stubs ...
-std::unique_ptr<HTTPDownloader> HTTPDownloader::Create(std::string user_agent) { return nullptr; }
+// [F5] HTTPDownloader::Create now lives in common/HTTPDownloaderNSURL.mm.
 
 // Global stubs for DISCopen
 void GetValidDrive(std::string&) {  }
@@ -813,9 +1116,11 @@ bool PCAPAdapter::ValidateEtherFrame(NetPacket*) { return false; }
 // -- End Host Stubs --
 
 // Settings Interface
+#include "3rdparty/simpleini/include/SimpleIni.h"
+#include "pcsx2/INISettingsInterface.h"
+
 static INISettingsInterface* s_settings_interface = nullptr;
 // Expose to iPSX2Bridge.mm via extern
-INISettingsInterface* g_p44_settings_interface = nullptr;
 
 //
 // -- IOS AppDelegate & SceneDelegate --
@@ -865,7 +1170,15 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
         if (!static_cast<INISettingsInterface*>(s_settings_interface)->Load()) {
             Console.WriteLn("Creating new config at %s", iniPath.c_str());
             
-            // [iPSX2] Standard Defaults: JIT Enabled (if supported), EE/IOP/VU Recompilers ON
+            // [JIT-OFF 2026-08-25] 全コンポーネント iv2 が既定。JIT 版の出荷は行わない。
+            // App Store では codegen が禁止で、jit を書いても起動時に必ず iv2 へ降格されていた
+            // (= 設定に "JIT" と表示されるのに中身は IV2、という嘘の状態だった)。
+            // Per-component engine selector (source of truth, see VMManager parse_mode):
+            //   "interp" | "iv2" | "jit"。UI は interp / iv2 のみ提示する。
+            s_settings_interface->SetStringValue("EmuCore/CPU", "EEMode", "iv2");
+            s_settings_interface->SetStringValue("EmuCore/CPU", "IOPMode", "iv2");
+            s_settings_interface->SetStringValue("EmuCore/CPU", "VU0Mode", "iv2");
+            s_settings_interface->SetStringValue("EmuCore/CPU", "VU1Mode", "iv2");
             s_settings_interface->SetIntValue("EmuCore/CPU", "CoreType", 0); // Recompiler
             s_settings_interface->SetBoolValue("EmuCore/CPU", "UseArm64Dynarec", false);
             s_settings_interface->SetBoolValue("EmuCore/CPU/Recompiler", "EnableEE", true);
@@ -878,22 +1191,21 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
             // Audio
             s_settings_interface->SetStringValue("SPU2/Output", "Backend", "SDL");
 
-            // GS — use PCSX2 defaults; pcrtc_offsets controlled per-game via game database
-            s_settings_interface->SetIntValue("EmuCore/GS", "VsyncQueueSize", 2);
+            // GS
+            s_settings_interface->SetIntValue("EmuCore/GS", "VsyncQueueSize", 8);
 
             // Speedhacks
-            s_settings_interface->SetBoolValue("EmuCore/Speedhacks", "vuThread", false); // MTVU off by default (user toggle: Emulator > Experimental)
+            s_settings_interface->SetBoolValue("EmuCore/Speedhacks", "vuThread", false); // MTVU off by default (Emulator > Experimental)
             
             Console.WriteLn("@@CFG_DEFAULTS@@ created=1 CoreType=0 UseArm64Dynarec=false EnableEE=1");
             s_settings_interface->Save();
         }
         Host::Internal::SetBaseSettingsLayer(s_settings_interface);
-        g_p44_settings_interface = s_settings_interface; // expose to Bridge
 // Load gamepad button mapping from INI
         for (int i = 0; i < 16; i++) {
             char key[32]; snprintf(key, sizeof(key), "Button%d", i);
             int val = s_settings_interface->GetIntValue("iPSX2/GamepadMapping", key, s_defaultMap[i]);
-            GamepadMapper::buttonMap[i] = val;
+            s_buttonMap[i] = val;
         }
     }
     // One-time migration for existing INI (runs once, then conditions are false)
@@ -903,20 +1215,29 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
     if (!s_settings_interface->ContainsValue("EmuCore/CPU", "ExtraMemory")) {
         s_settings_interface->SetBoolValue("EmuCore/CPU", "ExtraMemory", false);
     }
+    // [JIT build] The otti83 frontend rewrote "jit" mode keys to "iv2" here on every launch.
+    // This core (Thiago-Heleno) runs the JIT recompilers via CoreType / Recompiler.Enable*,
+    // so that migration is removed.
 
+    // [F8] Seed the directories GameList scans; the rule is shared with the macOS branch and
+    // lives in GameListPaths.h, including the container-rebase that keeps entries alive across
+    // a reinstall. Documents/iso is scanned recursively and Documents itself one level deep —
+    // games sitting directly in Documents used to belong to neither key and were never
+    // enumerated, however often a refresh was asked for.
+    iPSX2::GameListPaths::Seed(s_settings_interface, dataRoot);
+    iPSX2::OsdDefaults::Seed(s_settings_interface);
     s_settings_interface->Save();
     [self checkAndConfigureBIOS];
 
-    // GS Renderer: Metal fixed on iOS. Only override if not already Metal.
-#if DEBUG
-    if (const char* null_gs_env = getenv("iPSX2_NULL_GS"); null_gs_env && atoi(null_gs_env)) {
-        EmuConfig.GS.Renderer = GSRendererType::Null;
-        Console.WriteLn("@@CFG@@ GS Renderer: Null (DEBUG)");
-    } else
-#endif
-    {
-        EmuConfig.GS.Renderer = GSRendererType::Metal;
-    }
+    // [iPSX2] ここ (iOS / Simulator の経路) には「GS Renderer: Metal fixed on iOS」と称して
+    //   EmuConfig.GS.Renderer = GSRendererType::Metal;
+    // を書いていたが、**直後の LoadStartupSettings() が INI から読み直して上書きする**ため
+    // 何の効果も無い死んだコードだった。コメントも実態と食い違っていた
+    // (SwiftUI の Graphics 設定には以前からレンダラー picker があり、INI の
+    //  `[EmuCore/GS] Renderer` を書いている = Metal 固定ではない)。
+    // レンダラーは INI が single source (Hard Rule 5c)。既定は INI 未設定時の `Auto`
+    // → GSUtil::GetPreferredRenderer() で Apple では Metal。
+    // DEBUG 限定の `iPSX2_NULL_GS` env も Null が UI から選べるので併せて撤去。
     s_settings_interface->Save();
 
     VMManager::Internal::LoadStartupSettings();
@@ -1003,7 +1324,7 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
         Console.WriteLn("[UI] VM boot requested from UI (rootVC=%p)", s_rootVC);
         if (s_rootVC) s_rootVC.view.backgroundColor = [UIColor blackColor];
 #if TARGET_OS_SIMULATOR
-        [[VMController sharedInstance] startVMThread];
+        [self startVMThread];
 #else
         [self checkJITAndStartVM];
 #endif
@@ -1014,7 +1335,7 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
                                                        queue:nil
                                                   usingBlock:^(NSNotification * _Nonnull note) {
         Console.WriteLn("[UI] VM shutdown requested from UI");
-        [[VMController sharedInstance] requestVMShutdown];
+        s_requestVMStop.store(true);
     }];
 
     // iPSX2VMDidShutdown / iPSX2ReturnToMenu: no rootVC background change needed.
@@ -1062,7 +1383,7 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
     // Fallback: no SwiftUI — auto-boot like before
     if (!EmuConfig.BaseFilenames.Bios.empty() && FileSystem::FileExists(Path::Combine(EmuFolders::Bios, EmuConfig.BaseFilenames.Bios).c_str())) {
 #if TARGET_OS_SIMULATOR
-        [[VMController sharedInstance] startVMThread];
+        [self startVMThread];
 #else
         [self checkJITAndStartVM];
 #endif
@@ -1102,24 +1423,16 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
             if (std::string(envBios) != destPath) {
                 FILE *src = fopen(envBios, "rb");
                 FILE *dst = fopen(destPath.c_str(), "wb");
-                bool copyOk = true;
                 if (src && dst) {
-                    char buffer[4096];
-                    size_t bytes;
-                    while ((bytes = fread(buffer, 1, 4096, src)) > 0) {
-                        if (fwrite(buffer, 1, bytes, dst) != bytes) { copyOk = false; break; }
-                    }
-                    fclose(src); fclose(dst);
-                    if (!copyOk) {
-                        Console.Error("[BIOS] Copy failed (disk full?): %s -> %s", envBios, destPath.c_str());
-                        std::remove(destPath.c_str());
-                    } else {
-                        Console.WriteLn("Copied env-var BIOS to: %s", destPath.c_str());
-                    }
+                     char buffer[4096];
+                     size_t bytes;
+                     while ((bytes = fread(buffer, 1, 4096, src)) > 0) fwrite(buffer, 1, bytes, dst);
+                     fclose(src); fclose(dst);
+                     Console.WriteLn("Copied env-var BIOS to: %s", destPath.c_str());
                 } else {
-                    Console.Error("Failed to copy env-var BIOS. src=%p dst=%p", src, dst);
-                    if (src) fclose(src);
-                    if (dst) fclose(dst);
+                     Console.Error("Failed to copy env-var BIOS. src=%p dst=%p", src, dst);
+                     if (src) fclose(src);
+                     if (dst) fclose(dst);
                 }
             }
             
@@ -1141,29 +1454,10 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
         return;
     }
 
-    // 1b. Auto-move BIOS files from Documents/ root to bios/ subfolder
-    {
-        FileSystem::FindResultsArray rootResults;
-        if (FileSystem::FindFiles(dataRoot.c_str(), "*", FILESYSTEM_FIND_FILES, &rootResults)) {
-            for (const auto& fd : rootResults) {
-                if (fd.Size >= 1024*1024 && fd.Size <= 50*1024*1024) {
-                    std::string fn = std::string(Path::GetFileName(fd.FileName));
-                    std::string ext = fn.size() >= 4 ? fn.substr(fn.size() - 4) : "";
-                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                    if (ext == ".bin" || ext == ".rom") {
-                        std::string src = Path::Combine(dataRoot, fn);
-                        std::string dst = Path::Combine(biosDir, fn);
-                        if (!FileSystem::FileExists(dst.c_str())) {
-                            if (rename(src.c_str(), dst.c_str()) == 0)
-                                Console.WriteLn("[Files] Moved BIOS to bios/: %s", fn.c_str());
-                            else
-                                Console.WriteLn("[Files] Failed to move BIOS: %s (errno=%d)", fn.c_str(), errno);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // 1b. Adopt anything BIOS-shaped left in Documents/ root. Shared with the BIOS list's
+    //     refresh (iPSX2Bridge availableBIOSes) so a file dropped in while the app is running
+    //     does not have to wait for a relaunch.
+    iPSX2::BiosIntake::AdoptFromDataRoot(dataRoot);
 
     // 2. Scan Documents/bios
     FileSystem::FindResultsArray results;
@@ -1205,19 +1499,8 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
                  std::string src = bfDir + "/" + fd.FileName;
                  std::string dst = biosDir + "/" + fd.FileName;
                  FILE *s=fopen(src.c_str(),"rb"), *d=fopen(dst.c_str(),"wb");
-                 bool copyOk2 = true;
-                 if (s && d) {
-                     char b[4096]; size_t n;
-                     while ((n = fread(b, 1, 4096, s)) > 0) {
-                         if (fwrite(b, 1, n, d) != n) { copyOk2 = false; break; }
-                     }
-                 }
-                 if (s) fclose(s);
-                 if (d) fclose(d);
-                 if (!copyOk2) {
-                     Console.Error("[BIOS] BiosFiles bundle copy failed");
-                     continue;
-                 }
+                 if(s && d) { char b[4096]; size_t n; while((n=fread(b,1,4096,s))>0) fwrite(b,1,n,d); }
+                 if(s) fclose(s); if(d) fclose(d);
                  EmuConfig.BaseFilenames.Bios = fd.FileName;
                  return;
              }
@@ -1235,24 +1518,17 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
 
                  FILE *src = fopen(srcPath.c_str(), "rb");
                  FILE *dst = fopen(destPath.c_str(), "wb");
-                 bool copyOk3 = true;
                  if (src && dst) {
                      char buffer[4096];
                      size_t bytes;
-                     while ((bytes = fread(buffer, 1, 4096, src)) > 0) {
-                         if (fwrite(buffer, 1, bytes, dst) != bytes) { copyOk3 = false; break; }
-                     }
-                 }
-                 if (src) fclose(src);
-                 if (dst) fclose(dst);
-                 if (copyOk3 && src && dst) {
+                     while ((bytes = fread(buffer, 1, 4096, src)) > 0) fwrite(buffer, 1, bytes, dst);
+                     fclose(src); fclose(dst);
                      EmuConfig.BaseFilenames.Bios = fd.FileName;
                      Console.WriteLn("Copy and set successful.");
                      return;
-                 } else if (!copyOk3) {
-                     Console.Error("[BIOS] Bundle copy failed (disk full?)");
-                     std::remove(destPath.c_str());
                  }
+                 if(src) fclose(src);
+                 if(dst) fclose(dst);
              }
         }
     }
@@ -1300,7 +1576,7 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
         });
         
 #if TARGET_OS_SIMULATOR
-        [[VMController sharedInstance] startVMThread];
+        [self startVMThread];
 #else
         [self checkJITAndStartVM];
 #endif
@@ -1317,24 +1593,186 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
 #if !TARGET_OS_SIMULATOR
     if (DarwinMisc::IsJITAvailable()) {
         Console.WriteLn("@@JIT_GATE@@ JIT available — starting VM in JIT mode");
-        [[VMController sharedInstance] startVMThread];
+        [self startVMThread];
         return;
     }
 
     Console.Warning("@@JIT_GATE@@ JIT NOT available — falling back to Interpreter mode");
     DarwinMisc::iPSX2_FORCE_EE_INTERP = 1;
     Console.WriteLn("@@JIT_GATE@@ iPSX2_FORCE_EE_INTERP forced to 1");
-    [[VMController sharedInstance] startVMThread];
+    [self startVMThread];
 #else
-    [[VMController sharedInstance] startVMThread];
+    [self startVMThread];
 #endif
 }
 
+- (void)startVMThread {
+    {
+        std::lock_guard<std::mutex> lk(s_vmMutex);
+        if (s_vmThreadActive.load()) {
+            Console.WriteLn("[VM] startVMThread: VM already active, ignoring");
+            return;
+        }
 
+        // Signal the persistent thread to boot
+        s_requestVMBoot.store(true);
+        s_requestVMStop.store(false);
+
+        if (s_vmThreadCreated) {
+            Console.WriteLn("[VM] startVMThread: signaling existing VM thread");
+            s_vmCV.notify_one();
+            return;
+        }
+
+        // First call: create the persistent thread
+        s_vmThreadCreated = true;
+    }
+
+    Console.WriteLn("[VM] Creating persistent VM thread...");
+
+    std::thread vmThread([]() {
+        // === ONE-TIME INIT (runs once per app lifetime) ===
+        Console.WriteLn("[VM] VM Thread: CPUThreadInitialize (once)...");
+        if (!VMManager::Internal::CPUThreadInitialize()) {
+            Console.Error("VM Thread: CPUThreadInitialize failed.");
+            std::lock_guard<std::mutex> lk(s_vmMutex);
+            s_vmThreadCreated = false;
+            return;
+        }
+
+        // Set ImGui font path (once)
+        std::string fontPath = Path::Combine(EmuFolders::Resources, "fonts/Roboto-Regular.ttf");
+        ImGuiManager::SetFontPathAndRange(std::move(fontPath), {});
+
+        // === PERSISTENT BOOT LOOP ===
+        bool auto_boot_first = (getenv("iPSX2_AUTO_BOOT") && atoi(getenv("iPSX2_AUTO_BOOT")) == 1)
+                            || (getenv("iPSX2_BOOT_ELF") != nullptr);
+        while (true) {
+            // Wait for boot signal (or auto-boot on first iteration)
+            {
+                std::unique_lock<std::mutex> lk(s_vmMutex);
+                if (auto_boot_first) {
+                    Console.WriteLn("[AutoBoot] @@AUTO_BOOT@@ skipping UI wait, auto-boot enabled");
+                    auto_boot_first = false;
+                } else {
+                    Console.WriteLn("[VM] VM Thread: waiting for boot request...");
+                    s_vmCV.wait(lk, [] { return s_requestVMBoot.load(); });
+                }
+                s_requestVMBoot.store(false);
+            }
+
+            Console.WriteLn("[VM] VM Thread: boot signal received, preparing boot params...");
+            s_vmThreadActive.store(true);
+
+            // --- Build boot parameters from INI ---
+            VMBootParameters boot_params;
+            boot_params.fast_boot = false;
+            {
+                std::string isoDir = EmuFolders::DataRoot + "/iso";
+                std::string defaultISO = "";
+                std::string isoFilename = s_settings_interface->GetStringValue("GameISO", "BootISO", defaultISO.c_str());
+                bool fastBoot = s_settings_interface->GetBoolValue("GameISO", "FastBoot", false);
+                s_settings_interface->SetStringValue("GameISO", "BootISO", isoFilename.c_str());
+                s_settings_interface->SetBoolValue("GameISO", "FastBoot", fastBoot);
+                s_settings_interface->Save();
+                // [F8] A game-list entry is an absolute path, not a bare filename inside
+                // Documents/iso, so honour one when given. Bare names still resolve as before.
+                std::string isoPath = Path::IsAbsolute(isoFilename) ? isoFilename : (isoDir + "/" + isoFilename);
+                // Fallback: check Documents/ root if not found in iso/
+                if (!isoFilename.empty() && !FileSystem::FileExists(isoPath.c_str())) {
+                    std::string rootPath = EmuFolders::DataRoot + "/" + isoFilename;
+                    if (FileSystem::FileExists(rootPath.c_str())) {
+                        isoPath = rootPath;
+                        Console.WriteLn("ISO found in Documents/ root: %s", isoPath.c_str());
+                    }
+                }
+                if (!isoFilename.empty() && FileSystem::FileExists(isoPath.c_str())) {
+                    std::string suffix = isoFilename.size() >= 4 ? isoFilename.substr(isoFilename.size() - 4) : "";
+                    std::transform(suffix.begin(), suffix.end(), suffix.begin(), ::tolower);
+                    bool isElf = (suffix == ".elf");
+                    if (isElf) {
+                        boot_params.elf_override = isoPath;
+                        boot_params.source_type = CDVD_SourceType::NoDisc;
+                        boot_params.fast_boot = true;
+                        Console.WriteLn("@@ISO_BOOT@@ path=%s fast_boot=1 mode=ELF (INI: %s)", isoPath.c_str(), isoFilename.c_str());
+                    } else {
+                        boot_params.filename = isoPath;
+                        boot_params.source_type = CDVD_SourceType::Iso;
+                        boot_params.fast_boot = fastBoot;
+                        Console.WriteLn("@@ISO_BOOT@@ path=%s fast_boot=%d (INI: %s)", isoPath.c_str(), fastBoot ? 1 : 0, isoFilename.c_str());
+                    }
+                } else {
+                    Console.WriteLn("@@ISO_BOOT@@ no ISO='%s', falling back to BIOS only", isoFilename.c_str());
+                }
+            }
+
+            if (getenv("iPSX2_AUTO_BOOT_BIOS")) {
+                Console.WriteLn("@@AUTO_BOOT_BIOS@@ enabled=1 action=triggered");
+                boot_params.fast_boot = false;
+            }
+            // ps2autotests: boot ELF directly via env var
+            if (const char* testElf = getenv("iPSX2_BOOT_ELF")) {
+                boot_params.elf_override = testElf;
+                boot_params.source_type = CDVD_SourceType::NoDisc;
+                boot_params.fast_boot = true;
+                Console.WriteLn("@@BOOT_ELF@@ elf=%s", testElf);
+            }
+
+            // BIOS sanity check
+            if (EmuConfig.BaseFilenames.Bios.empty() || !FileSystem::FileExists(Path::Combine(EmuFolders::Bios, EmuConfig.BaseFilenames.Bios).c_str())) {
+                Console.Error("CRITICAL: BIOS verification failed inside VM thread.");
+                Host::ReportErrorAsync("BIOS Error", "Validation failed.");
+                s_vmThreadActive.store(false);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2VMDidShutdown" object:nil];
+                });
+                continue; // back to wait loop
+            }
+
+            // --- Initialize & Execute VM ---
+            if (VMManager::Initialize(boot_params)) {
+                Console.WriteLn("[VM] VM initialized successfully");
+                VMManager::SetState(VMState::Running);
+
+                while (true) {
+                    if (s_requestVMStop.load()) {
+                        Console.WriteLn("[VM] VM Thread: stop requested from UI.");
+                        break;
+                    }
+                    VMState state = VMManager::GetState();
+                    if (state == VMState::Stopping || state == VMState::Shutdown) {
+                        Console.WriteLn("[VM] VM Thread: shutdown signal received.");
+                        break;
+                    } else if (state == VMState::Running) {
+                        VMManager::Execute();
+                    } else {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+                }
+
+                Console.WriteLn("[VM] VM Thread: shutting down VM...");
+                VMManager::Shutdown(false);
+            } else {
+                Console.Error("VM Thread: VMManager::Initialize failed!");
+                Host::ReportErrorAsync("Startup Error", "VM Initialization Failed.");
+            }
+
+            // --- Post-shutdown: reset state, notify UI ---
+            s_vmThreadActive.store(false);
+            s_requestVMStop.store(false);
+            Console.WriteLn("[VM] VM Thread: shutdown complete, posting notification");
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"iPSX2VMDidShutdown" object:nil];
+            });
+        } // end while(true) boot loop
+
+        // Note: CPUThreadShutdown() is never reached because the thread persists.
+        // It would only be needed if we added an app-termination signal.
+    });
+    vmThread.detach();
+}
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
-    s_menuVC = nil;
-    s_rootVC = nil;
 }
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
@@ -1379,6 +1817,10 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
     EmuFolders::DataRoot = dataRoot;
     EmuFolders::AppRoot = [resourcePath UTF8String];
     EmuFolders::Resources = [resourcePath UTF8String];
+    // [F6] See the macOS branch: an unassigned Settings resolves derived paths against the
+    // filesystem root, which is where "/debuggerlayouts" in the startup log came from.
+    EmuFolders::Settings = dataRoot + "/inis";
+    mkdir(EmuFolders::Settings.c_str(), 0755);
     EmuFolders::Bios = dataRoot + "/bios";
     // ... [Init other folders if needed, but DataRoot is key] ...
     EmuFolders::Logs = dataRoot + "/logs";
@@ -1409,7 +1851,13 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
     fprintf(stderr, "@@LOG_SINK@@ unified=1 path=%s pid=%d\n", logPath.c_str(), getpid());
     NSString* bundleID = [[NSBundle mainBundle] bundleIdentifier];
     fprintf(stderr, "@@BUNDLE_ID@@ %s\n", bundleID ? [bundleID UTF8String] : "(null)");
-    fprintf(stderr, "@@BUILD_ID@@ %s_%s_%s\n", iPSX2_GIT_HASH, __DATE__, __TIME__);
+#ifndef IPSX2_BUILD_TIME
+#define IPSX2_BUILD_TIME "unknown"
+#endif
+#ifndef IPSX2_VERSION_STR
+#define IPSX2_VERSION_STR "dev"
+#endif
+    fprintf(stderr, "@@BUILD_ID@@ v%s %s %s\n", IPSX2_VERSION_STR, iPSX2_GIT_HASH, IPSX2_BUILD_TIME);
     
     // [iPSX2] Unification Validation
     // @@BIOS_GATE@@ build_id=2026-01-14_13-30-00 bundle=(from_nsbundle)
@@ -1452,14 +1900,6 @@ INISettingsInterface* g_p44_settings_interface = nullptr;
 - (void)application:(UIApplication *)application didDiscardSceneSessions:(NSSet<UISceneSession *> *)sceneSessions {
 }
 
-- (void)applicationWillTerminate:(UIApplication *)application {
-    Console.WriteLn("[App] applicationWillTerminate: signaling VM thread to exit");
-    s_requestVMStop.store(true);
-    s_requestAppExit.store(true);
-    s_vmCV.notify_all();
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-}
-
 @end
 
 
@@ -1480,3 +1920,4 @@ int main(int argc, char * argv[]) {
         return UIApplicationMain(argc, argv, nil, NSStringFromClass([PCSX2AppDelegate class]));
     }
 }
+#endif // iPSX2_MACOS
