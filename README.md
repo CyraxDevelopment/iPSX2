@@ -85,7 +85,7 @@ swift/          SwiftUI frontend (views, settings, game list)
 ## Credits
 
 - [PCSX2](https://github.com/PCSX2/pcsx2) team, for the emulator this is built on
-- ARMSX2, for the arm64 port
+- [ARMSX2](https://github.com/ARMSX2/ARMSX2), for the arm64 port
 - [Thiago-Heleno](https://github.com/Thiago-Heleno/iPSX2-src), for the original iOS port with JIT
 - otti83, for the iPSX2 frontend features ported here
 - Third-party libraries vendored under `cpp/3rdparty/` (SDL3, VIXL, fmt, imgui, rapidyaml, libchdr, libzip, cubeb, rcheevos, freetype, soundtouch, lz4, lzma, zstd), each under its own license
