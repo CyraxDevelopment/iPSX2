@@ -1500,7 +1500,13 @@ namespace EmuFolders
 // [iPSX2 EE bisect] Build with -DIPSX2_NO_<GROUP>_RECOMPILE to run one instruction group
 // through the interpreter while the rest stays on the JIT (see .github/workflows/ee-bisect.yml).
 // The tag string lands in the binary so a built IPA can be checked for its variant.
-#if defined(IPSX2_FLUSHKIND_XMM)
+#if defined(IPSX2_ADDSUB_SCRATCH_BUILD)
+#define IPSX2_EE_BISECT_TAG "addsub-scratch"
+#elif defined(IPSX2_ADDSUB_BEFORE_BUILD)
+#define IPSX2_EE_BISECT_TAG "addsub-flush-before"
+#elif defined(IPSX2_ADDSUB_AFTER_BUILD)
+#define IPSX2_EE_BISECT_TAG "addsub-flush-after"
+#elif defined(IPSX2_FLUSHKIND_XMM)
 #define IPSX2_EE_BISECT_TAG "flushkind-XMM"
 #elif defined(IPSX2_FLUSHKIND_GPR)
 #define IPSX2_EE_BISECT_TAG "flushkind-GPR"

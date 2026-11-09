@@ -12,10 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: XMM
-            flags: "-DIPSX2_FLUSHKIND_XMM -DIPSX2_FPU_FLUSH_AROUND=1 -DIPSX2_FPU_FLUSH_KIND=1"
-          - group: GPR
-            flags: "-DIPSX2_FLUSHKIND_GPR -DIPSX2_FPU_FLUSH_AROUND=1 -DIPSX2_FPU_FLUSH_KIND=2"
+          - group: SCRATCH
+            flags: "-DIPSX2_ADDSUB_SCRATCH_BUILD -DIPSX2_ADDSUB_SCRATCH_TEMP=1"
+          - group: BEFORE
+            flags: "-DIPSX2_ADDSUB_BEFORE_BUILD -DIPSX2_FPU_FLUSHOP_ADD_S=1 -DIPSX2_FPU_FLUSHOP_SUB_S=1 -DIPSX2_FPU_FLUSHOP_ADDA_S=1 -DIPSX2_FPU_FLUSHOP_SUBA_S=1 -DIPSX2_FPU_FLUSH_SIDE=1"
+          - group: AFTER
+            flags: "-DIPSX2_ADDSUB_AFTER_BUILD -DIPSX2_FPU_FLUSHOP_ADD_S=1 -DIPSX2_FPU_FLUSHOP_SUB_S=1 -DIPSX2_FPU_FLUSHOP_ADDA_S=1 -DIPSX2_FPU_FLUSHOP_SUBA_S=1 -DIPSX2_FPU_FLUSH_SIDE=2"
 
     env:
       SCHEME: iPSX2
@@ -236,7 +238,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: iPSX2-flushkind-${{ matrix.group }}
+          name: iPSX2-addsub-${{ matrix.group }}
           path: ${{ env.IPA_PATH }}
           retention-days: 30
           if-no-files-found: error

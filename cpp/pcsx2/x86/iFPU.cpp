@@ -462,8 +462,13 @@ void FPU_ADD_SUB(int regd, int regt, int issub)
     auto regD = a64::QRegister(regd);
     auto regT = a64::QRegister(regt);
 
-	const int xmmtemp = _allocTempXMMreg(XMMT_FPS); //temporary for anding with regd/regt
-    auto regQTemp = a64::QRegister(xmmtemp);
+#ifndef IPSX2_ADDSUB_SCRATCH_TEMP
+#define IPSX2_ADDSUB_SCRATCH_TEMP 0
+#endif
+	// [iPSX2] With IPSX2_ADDSUB_SCRATCH_TEMP the mask temp is the fixed scratch q31 instead of an
+	// allocated XMM reg, so this op can never evict another cached register.
+	const int xmmtemp = IPSX2_ADDSUB_SCRATCH_TEMP ? -1 : _allocTempXMMreg(XMMT_FPS); //temporary for anding with regd/regt
+    auto regQTemp = IPSX2_ADDSUB_SCRATCH_TEMP ? RQSCRATCH2 : a64::QRegister(xmmtemp);
 
 //	xMOVD(ecx, xRegisterSSE(regd)); // ecx receives regd
     armAsm->Fmov(ECX, regD.S());
@@ -600,7 +605,8 @@ void FPU_ADD_SUB(int regd, int regt, int issub)
 //	x86SetJ8(j8Ptr[7]);
     armBind(&j8Ptr7);
 
-	_freeXMMreg(xmmtemp);
+	if (xmmtemp >= 0)
+		_freeXMMreg(xmmtemp);
 }
 
 void FPU_ADD(int regd, int regt)
@@ -2748,9 +2754,13 @@ static void iPSX2_FpuFlush()
 	}
 }
 
+#ifndef IPSX2_FPU_FLUSH_SIDE
+#define IPSX2_FPU_FLUSH_SIDE 3 // 1 = before the op, 2 = after, 3 = both
+#endif
 void iPSX2_FpuVerifyEmitBefore()
 {
-	iPSX2_FpuFlush();
+	if (IPSX2_FPU_VERIFY || (IPSX2_FPU_FLUSH_SIDE & 1))
+		iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;
 	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyBefore));
@@ -2758,7 +2768,8 @@ void iPSX2_FpuVerifyEmitBefore()
 
 void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
 {
-	iPSX2_FpuFlush();
+	if (IPSX2_FPU_VERIFY || (IPSX2_FPU_FLUSH_SIDE & 2))
+		iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;
 	armAsm->Mov(RXARG1, static_cast<u64>(reinterpret_cast<uptr>(interp)));
