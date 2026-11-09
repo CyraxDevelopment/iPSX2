@@ -83,14 +83,17 @@ static inline a64::WRegister HostW(int slot) { return a64::WRegister(HostGprPhys
 #define EEREC_D    (((info) >> 18) & 0x1f)
 #define EEREC_LO   (((info) >> 18) & 0x1f)
 #define EEREC_HI   (((info) >> 23) & 0x1f)
-#define EEREC_ACC  (((info) >> 18) & 0x1f)
+// [iPSX2] ACC shares its field with HI (bit 23), never with D. With ACC at bit 18 an op that has
+// both a D and an ACC register (MADD.S / MSUB.S) OR'ed the two register numbers together and
+// read/wrote the wrong XMM register whenever ACC was still cached from an earlier ADDA/MULA.
+#define EEREC_ACC  (((info) >> 23) & 0x1f)
 
 #define PROCESS_EE_SET_S(reg)   (((reg) <<  8) | PROCESS_EE_S)
 #define PROCESS_EE_SET_T(reg)   (((reg) << 13) | PROCESS_EE_T)
 #define PROCESS_EE_SET_D(reg)   (((reg) << 18) | PROCESS_EE_D)
 #define PROCESS_EE_SET_LO(reg)  (((reg) << 18) | PROCESS_EE_LO)
 #define PROCESS_EE_SET_HI(reg)  (((reg) << 23) | PROCESS_EE_HI)
-#define PROCESS_EE_SET_ACC(reg) (((reg) << 18) | PROCESS_EE_ACC)
+#define PROCESS_EE_SET_ACC(reg) (((reg) << 23) | PROCESS_EE_ACC)
 
 // special info not related to above flags
 #define PROCESS_CONSTS 1

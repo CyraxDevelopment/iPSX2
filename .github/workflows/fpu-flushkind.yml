@@ -12,8 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: BACKPATCH
-            flags: "-DIPSX2_BACKPATCH_FIX_BUILD"
+          - group: ACC
+            flags: "-DIPSX2_ACC_FIX_BUILD"
 
     env:
       SCHEME: iPSX2
