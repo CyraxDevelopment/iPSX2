@@ -212,34 +212,49 @@ struct StickView: View {
     @State private var off: CGSize = .zero
     @State private var isDragging = false
 
+    // [iPSX2] The stick is absolute: its value is where the finger is relative to the centre of
+    // the ring, not how far it moved since touching down. With the old relative scheme a touch
+    // on the rim did nothing until the finger moved, and a circular motion that started off-centre
+    // never covered all directions, so "rotate the stick" prompts (God of War, God Hand) failed.
+    /// Touches that start and stay within this distance of the centre count as an L3/R3 click.
+    private let clickRadius: CGFloat = 10
+
     var body: some View {
         ZStack {
-            Circle().fill(.black.opacity(0.18)).stroke(.white.opacity(0.18), lineWidth: 1).frame(width: sz)
-            Circle().fill(.white.opacity(0.35)).frame(width: knob).offset(off)
+            Circle().fill(.black.opacity(0.18)).stroke(.white.opacity(0.18), lineWidth: 1)
+                .frame(width: sz, height: sz)
+            Circle().fill(.white.opacity(0.35)).frame(width: knob, height: knob).offset(off)
             // L3/R3 label
             Text(isLeft ? "L3" : "R3")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.white.opacity(0.3))
                 .offset(y: sz / 2 + 8)
         }
+        .frame(width: sz, height: sz)
         .contentShape(Circle())
-        .simultaneousGesture(DragGesture(minimumDistance: 0)
+        .simultaneousGesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { v in
                 let maxR = (sz - knob) / 2
-                let dist = hypot(v.translation.width, v.translation.height)
-                if dist > 4 {
-                    isDragging = true
-                    let d = min(dist, maxR)
-                    let a = atan2(v.translation.height, v.translation.width)
-                    off = CGSize(width: cos(a) * d, height: sin(a) * d)
-                    let nx = Float(cos(a) * d / maxR); let ny = Float(sin(a) * d / maxR)
-                    isLeft ? EmulatorBridge.shared.setLeftStick(x: nx, y: ny)
-                           : EmulatorBridge.shared.setRightStick(x: nx, y: ny)
+                let dx = v.location.x - sz / 2
+                let dy = v.location.y - sz / 2
+                let dist = hypot(dx, dy)
+                // A touch near the centre may still become an L3/R3 click; anything else is
+                // stick input straight away, including the very first touch on the rim.
+                if !isDragging && dist <= clickRadius && hypot(v.translation.width, v.translation.height) <= clickRadius {
+                    return
                 }
+                isDragging = true
+                let d = min(dist, maxR)
+                let a = atan2(dy, dx)
+                off = CGSize(width: cos(a) * d, height: sin(a) * d)
+                let mag = Float(d / maxR)
+                let nx = Float(cos(a)) * mag; let ny = Float(sin(a)) * mag
+                isLeft ? EmulatorBridge.shared.setLeftStick(x: nx, y: ny)
+                       : EmulatorBridge.shared.setRightStick(x: nx, y: ny)
             }
             .onEnded { _ in
                 if !isDragging {
-                    // Tap (no significant drag) → L3/R3 press
+                    // Tap in the centre → L3/R3 press
                     let btn: iPSX2PadButton = isLeft ? .L3 : .R3
                     EmulatorBridge.shared.setPadButton(btn, pressed: true)
                     if SettingsStore.shared.hapticFeedback {
@@ -249,7 +264,7 @@ struct StickView: View {
                         EmulatorBridge.shared.setPadButton(btn, pressed: false)
                     }
                 } else {
-                    // Drag ended → reset stick
+                    // Finger lifted → recentre
                     withAnimation(.spring(duration: 0.12)) { off = .zero }
                     isLeft ? EmulatorBridge.shared.setLeftStick(x: 0, y: 0)
                            : EmulatorBridge.shared.setRightStick(x: 0, y: 0)
