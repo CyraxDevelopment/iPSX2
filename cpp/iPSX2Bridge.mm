@@ -931,6 +931,7 @@ NSString * const iPSX2PatchKeyDescription        = @"description";
 NSString * const iPSX2PatchKeyAuthor             = @"author";
 NSString * const iPSX2PatchKeyEnabled            = @"enabled";
 NSString * const iPSX2PatchKeyGloballyToggleable = @"globallyToggleable";
+NSString * const iPSX2PatchKeyBuiltIn            = @"builtIn";
 
 static std::unique_ptr<INISettingsInterface> s_game_settings_edit;
 static std::string s_game_settings_serial;
@@ -1225,6 +1226,7 @@ static NSString* const kNIPatchName = @"No-Interlacing";
             iPSX2PatchKeyAuthor             : NSStr(p.author),
             iPSX2PatchKeyEnabled            : @(is_enabled),
             iPSX2PatchKeyGloballyToggleable : @(toggleable),
+            iPSX2PatchKeyBuiltIn            : @(p.from_zip),
         }];
     }
     return out;
@@ -1244,6 +1246,16 @@ static NSString* const kNIPatchName = @"No-Interlacing";
             s_game_settings_edit->AddToStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_DISABLE_CONFIG_KEY, n);
     }
     SaveGameSettingsEdit();
+}
+
++ (NSUInteger)unlabelledPatchCountForEntryPath:(nonnull NSString *)path {
+    std::string serial;
+    u32 crc = 0;
+    if (!GameKeyForEntryPath(path, &serial, &crc))
+        return 0;
+    u32 unlabelled = 0;
+    Patch::GetPatchInfo(serial, crc, false, true, &unlabelled);
+    return unlabelled;
 }
 
 + (NSUInteger)unlabelledCheatCountForEntryPath:(nonnull NSString *)path {

@@ -582,7 +582,12 @@ Patch::PatchInfoList Patch::GetPatchInfo(const std::string_view serial, u32 crc,
 
 	EnumeratePnachFiles(serial, crc, cheats, showAllCRCS,
 		[&ret, num_unlabelled_patches](const std::string& filename, const std::string& pnach_data) {
+			const size_t before = ret.size();
 			ExtractPatchInfo(&ret, pnach_data, num_unlabelled_patches);
+			// Files on disk come with a full path; entries read from the zip are bare names.
+			const bool from_zip = filename.find_first_of("/\\") == std::string::npos;
+			for (size_t i = before; i < ret.size(); i++)
+				ret[i].from_zip = from_zip;
 		});
 
 	return ret;

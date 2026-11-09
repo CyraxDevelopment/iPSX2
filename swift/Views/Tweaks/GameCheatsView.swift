@@ -17,6 +17,8 @@ struct GameCheat: Identifiable, Hashable {
     let author: String
     let enabled: Bool
     let globallyToggleable: Bool
+    /// Patches only: from the bundled patches.zip rather than the user's patches folder.
+    let builtIn: Bool
 
     var id: String { name }
 
@@ -28,6 +30,7 @@ struct GameCheat: Identifiable, Hashable {
         author             = d["author"] as? String ?? ""
         enabled            = (d["enabled"] as? NSNumber)?.boolValue ?? false
         globallyToggleable = (d["globallyToggleable"] as? NSNumber)?.boolValue ?? false
+        builtIn            = (d["builtIn"] as? NSNumber)?.boolValue ?? false
     }
 }
 
@@ -39,6 +42,7 @@ struct GameCheatsView: View {
     @State private var cheats: [GameCheat] = []
     /// Built-in game patches (Documents/patches and the bundled patches.zip).
     @State private var patches: [GameCheat] = []
+    @State private var unlabelledPatches = 0
     @State private var unlabelled = 0
     @State private var showImporter = false
     @State private var importMessage: String?
@@ -54,15 +58,36 @@ struct GameCheatsView: View {
 
     var body: some View {
         List {
-            if !patches.isEmpty {
+            let userPatches = patches.filter { !$0.builtIn }
+            let builtInPatches = patches.filter { $0.builtIn }
+
+            if !userPatches.isEmpty || unlabelledPatches > 0 {
                 Section {
-                    ForEach(patches) { patch in
+                    ForEach(userPatches) { patch in
+                        patchRow(patch)
+                    }
+                    if unlabelledPatches > 0 {
+                        Label("\(unlabelledPatches) unnamed patch\(unlabelledPatches == 1 ? "" : "es")", systemImage: "questionmark.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Your Patches")
+                } footer: {
+                    Text(unlabelledPatches > 0
+                         ? "From .pnach files you put in Documents/patches. Unnamed patches always apply, and while a file for this game has any, the built-in patches are switched off to avoid conflicts. Cheat codes belong in Documents/cheats instead."
+                         : "From .pnach files you put in Documents/patches. Cheat codes belong in Documents/cheats instead.")
+                }
+            }
+
+            if !builtInPatches.isEmpty {
+                Section {
+                    ForEach(builtInPatches) { patch in
                         patchRow(patch)
                     }
                 } header: {
                     Text("Built-in Patches")
                 } footer: {
-                    Text("Fixes and enhancements shipped with the emulator (patches.zip) or placed in Documents/patches. They work without turning cheats on. Widescreen and No-Interlacing follow the switches under Settings › Patches unless you change them here.")
+                    Text("Fixes and enhancements shipped with the emulator (patches.zip). They work without turning cheats on. Widescreen and No-Interlacing follow the switches under Settings › Patches unless you change them here.")
                 }
             }
 
@@ -201,6 +226,7 @@ struct GameCheatsView: View {
 
     private func reload() {
         patches = iPSX2Bridge.patches(forEntryPath: game.path).map { GameCheat($0) }
+        unlabelledPatches = Int(iPSX2Bridge.unlabelledPatchCount(forEntryPath: game.path))
         cheats = iPSX2Bridge.cheats(forEntryPath: game.path).map { GameCheat($0) }
         unlabelled = Int(iPSX2Bridge.unlabelledCheatCount(forEntryPath: game.path))
     }

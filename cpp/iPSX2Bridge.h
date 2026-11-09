@@ -89,6 +89,7 @@ extern NSString * _Nonnull const iPSX2PatchKeyDescription;        // NSString
 extern NSString * _Nonnull const iPSX2PatchKeyAuthor;             // NSString
 extern NSString * _Nonnull const iPSX2PatchKeyEnabled;            // NSNumber BOOL
 extern NSString * _Nonnull const iPSX2PatchKeyGloballyToggleable; // NSNumber BOOL, owned by a global switch
+extern NSString * _Nonnull const iPSX2PatchKeyBuiltIn;            // NSNumber BOOL, from the bundled patches.zip
 
 @interface iPSX2Bridge : NSObject
 
@@ -283,6 +284,9 @@ extern NSString * _Nonnull const iPSX2PatchKeyGloballyToggleable; // NSNumber BO
 + (nonnull NSArray<NSDictionary<NSString *, id> *> *)patchesForEntryPath:(nonnull NSString *)path;
 /// Requires an open game-settings edit. Stored in the per-game INI [Patches] section.
 + (void)setPatch:(nonnull NSString *)name enabled:(BOOL)enabled globallyToggleable:(BOOL)globallyToggleable;
+/// Unnamed patches in the user's Documents/patches files. They always apply, and while any exist
+/// the core skips the bundled patches.zip for that game.
++ (NSUInteger)unlabelledPatchCountForEntryPath:(nonnull NSString *)path;
 + (nonnull NSString *)cheatsDirectory;
 /// Copies a .pnach into the cheats folder, keeping its filename. Returns NO on a failed copy.
 + (BOOL)importPnachAtPath:(nonnull NSString *)path;

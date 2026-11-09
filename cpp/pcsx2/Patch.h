@@ -55,6 +55,9 @@ namespace Patch
 		std::string name;
 		std::string description;
 		std::string author;
+		/// [iPSX2] True when the patch came from the bundled patches.zip rather than a file in the
+		/// user's patches folder.
+		bool from_zip = false;
 
 		std::string_view GetNamePart() const;
 		std::string_view GetNameParentPart() const;
