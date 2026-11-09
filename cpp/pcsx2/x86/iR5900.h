@@ -21,8 +21,12 @@
 
 // iPSX2: Enable recompiler modules when Real Rec is requested
 #if defined(iPSX2_REAL_REC) && iPSX2_REAL_REC
+    #ifndef IPSX2_NO_SHIFT_RECOMPILE
     #define SHIFT_RECOMPILE
+    #endif
+    #ifndef IPSX2_NO_MULTDIV_RECOMPILE
     #define MULTDIV_RECOMPILE
+    #endif
 #endif
 
 extern u32 maxrecmem;

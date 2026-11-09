@@ -1458,22 +1458,74 @@ namespace EmuFolders
 
 // [TEMP_DIAG] Enabling more recompile categories with NORENAME fix applied
 // Removal condition: all categories confirmed working
+#ifndef IPSX2_NO_SHIFT_RECOMPILE
 #define SHIFT_RECOMPILE
+#endif
+#ifndef IPSX2_NO_BRANCH_RECOMPILE
 #define BRANCH_RECOMPILE
+#endif
+#ifndef IPSX2_NO_ARITHMETICIMM_RECOMPILE
 #define ARITHMETICIMM_RECOMPILE
+#endif
+#ifndef IPSX2_NO_ARITHMETIC_RECOMPILE
 #define ARITHMETIC_RECOMPILE
+#endif
+#ifndef IPSX2_NO_MULTDIV_RECOMPILE
 #define MULTDIV_RECOMPILE
+#endif
+#ifndef IPSX2_NO_JUMP_RECOMPILE
 #define JUMP_RECOMPILE
+#endif
+#ifndef IPSX2_NO_LOADSTORE_RECOMPILE
 #define LOADSTORE_RECOMPILE
+#endif
+#ifndef IPSX2_NO_MOVE_RECOMPILE
 #define MOVE_RECOMPILE
+#endif
 //#define MMI_RECOMPILE   // x86 code not ported to ARM64
 //#define MMI0_RECOMPILE
 //#define MMI1_RECOMPILE
 //#define MMI2_RECOMPILE
 //#define MMI3_RECOMPILE
+#ifndef IPSX2_NO_FPU_RECOMPILE
 #define FPU_RECOMPILE
+#endif
+#ifndef IPSX2_NO_CP0_RECOMPILE
 #define CP0_RECOMPILE
+#endif
+#ifndef IPSX2_NO_CP2_RECOMPILE
 #define CP2_RECOMPILE
+#endif
+
+// [iPSX2 EE bisect] Build with -DIPSX2_NO_<GROUP>_RECOMPILE to run one instruction group
+// through the interpreter while the rest stays on the JIT (see .github/workflows/ee-bisect.yml).
+// The tag string lands in the binary so a built IPA can be checked for its variant.
+#if defined(IPSX2_NO_FPU_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-FPU"
+#elif defined(IPSX2_NO_CP2_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-CP2"
+#elif defined(IPSX2_NO_LOADSTORE_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-LOADSTORE"
+#elif defined(IPSX2_NO_MOVE_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-MOVE"
+#elif defined(IPSX2_NO_ARITHMETIC_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-ARITHMETIC"
+#elif defined(IPSX2_NO_ARITHMETICIMM_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-ARITHMETICIMM"
+#elif defined(IPSX2_NO_BRANCH_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-BRANCH"
+#elif defined(IPSX2_NO_JUMP_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-JUMP"
+#elif defined(IPSX2_NO_SHIFT_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-SHIFT"
+#elif defined(IPSX2_NO_MULTDIV_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-MULTDIV"
+#elif defined(IPSX2_NO_CP0_RECOMPILE)
+#define IPSX2_EE_BISECT_TAG "no-CP0"
+#endif
+#ifdef IPSX2_EE_BISECT_TAG
+[[maybe_unused]] __attribute__((used)) static const char s_ipsx2_ee_bisect_tag[] = "iPSX2-ee-bisect:" IPSX2_EE_BISECT_TAG;
+#endif
 
 // You can't recompile ARITHMETICIMM without ARITHMETIC.
 #ifndef ARITHMETIC_RECOMPILE
