@@ -255,8 +255,12 @@ void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 // [iPSX2 FPU verify] -DIPSX2_FPU_VERIFY=1: every FPU op is JIT-compiled as normal, then re-run by the
 // interpreter on a snapshot of the pre-op FPU state. Mismatches go to Documents/fpu_verify.txt.
 // The JIT result is what the game keeps, so gameplay is unchanged apart from speed.
+// -DIPSX2_FPU_FLUSH_AROUND=1: only the register flushes of the verify build, no checking.
+#ifndef IPSX2_FPU_FLUSH_AROUND
+#define IPSX2_FPU_FLUSH_AROUND 0
+#endif
 #ifndef IPSX2_FPU_VERIFY
-#define IPSX2_FPU_VERIFY 0
+#define IPSX2_FPU_VERIFY IPSX2_FPU_FLUSH_AROUND
 #endif
 void iPSX2_FpuVerifyBefore();
 void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name);

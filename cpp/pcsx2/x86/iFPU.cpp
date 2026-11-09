@@ -2247,8 +2247,12 @@ void recSQRT_S_xmm(int info)
 		roundmode_nearest.SetRoundMode(FPRoundMode::Nearest);
 //		xLDMXCSR(ptr32[&roundmode_nearest.bitmask]);
         // [iPSX2] was reloading Cpu.FPUFPCR here, so SQRT never actually switched to nearest.
+#ifdef IPSX2_SQRT_OLD_FPCR
+        armAsm->Msr(a64::FPCR, armLoad64(PTR_CPU(Cpu.FPUFPCR.bitmask)));
+#else
         armAsm->Mov(RAX, static_cast<u64>(roundmode_nearest.bitmask));
         armAsm->Msr(a64::FPCR, RAX);
+#endif
 		roundmodeFlag = true;
 	}
 
@@ -2722,12 +2726,16 @@ void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name)
 void iPSX2_FpuVerifyEmitBefore()
 {
 	iFlushCall(FLUSH_INTERPRETER);
+	if (IPSX2_FPU_FLUSH_AROUND)
+		return;
 	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyBefore));
 }
 
 void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
 {
 	iFlushCall(FLUSH_INTERPRETER);
+	if (IPSX2_FPU_FLUSH_AROUND)
+		return;
 	armAsm->Mov(RXARG1, static_cast<u64>(reinterpret_cast<uptr>(interp)));
 	armAsm->Mov(RXARG2, static_cast<u64>(reinterpret_cast<uptr>(name)));
 	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyAfter));

@@ -6,14 +6,16 @@ on:
 
 jobs:
   build-ipa:
-    name: FPU verify
+    name: FPU ${{ matrix.group }}
     runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - group: VERIFY
-            flags: "-DIPSX2_FPU_VERIFY_BUILD -DIPSX2_FPU_VERIFY=1"
+          - group: SQRTFIX
+            flags: "-DIPSX2_SQRTFIX_BUILD"
+          - group: FLUSH
+            flags: "-DIPSX2_FPU_FLUSH_BUILD -DIPSX2_FPU_FLUSH_AROUND=1 -DIPSX2_SQRT_OLD_FPCR"
 
     env:
       SCHEME: iPSX2
