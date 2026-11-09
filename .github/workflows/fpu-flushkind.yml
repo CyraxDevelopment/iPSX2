@@ -12,14 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: ADD_S
-            flags: "-DIPSX2_FLUSH1_ADD_S -DIPSX2_FPU_FLUSHOP_ADD_S=1"
-          - group: SUB_S
-            flags: "-DIPSX2_FLUSH1_SUB_S -DIPSX2_FPU_FLUSHOP_SUB_S=1"
-          - group: ADDA_S
-            flags: "-DIPSX2_FLUSH1_ADDA_S -DIPSX2_FPU_FLUSHOP_ADDA_S=1"
-          - group: SUBA_S
-            flags: "-DIPSX2_FLUSH1_SUBA_S -DIPSX2_FPU_FLUSHOP_SUBA_S=1"
+          - group: BACKPATCH
+            flags: "-DIPSX2_BACKPATCH_FIX_BUILD"
 
     env:
       SCHEME: iPSX2
@@ -240,7 +234,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: iPSX2-flush1-${{ matrix.group }}
+          name: iPSX2-fix-${{ matrix.group }}
           path: ${{ env.IPA_PATH }}
           retention-days: 30
           if-no-files-found: error
