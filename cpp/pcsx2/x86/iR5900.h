@@ -256,11 +256,81 @@ void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 // interpreter on a snapshot of the pre-op FPU state. Mismatches go to Documents/fpu_verify.txt.
 // The JIT result is what the game keeps, so gameplay is unchanged apart from speed.
 // -DIPSX2_FPU_FLUSH_AROUND=1: only the register flushes of the verify build, no checking.
+// -DIPSX2_FPU_FLUSHOP_<OP>=1: those flushes for one op only (bisecting the register-allocation bug).
 #ifndef IPSX2_FPU_FLUSH_AROUND
 #define IPSX2_FPU_FLUSH_AROUND 0
 #endif
 #ifndef IPSX2_FPU_VERIFY
-#define IPSX2_FPU_VERIFY IPSX2_FPU_FLUSH_AROUND
+#define IPSX2_FPU_VERIFY 0
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ABS_S
+#define IPSX2_FPU_FLUSHOP_ABS_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ADD_S
+#define IPSX2_FPU_FLUSHOP_ADD_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ADDA_S
+#define IPSX2_FPU_FLUSHOP_ADDA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_EQ
+#define IPSX2_FPU_FLUSHOP_C_EQ (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_LE
+#define IPSX2_FPU_FLUSHOP_C_LE (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_LT
+#define IPSX2_FPU_FLUSHOP_C_LT (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_DIV_S
+#define IPSX2_FPU_FLUSHOP_DIV_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MADD_S
+#define IPSX2_FPU_FLUSHOP_MADD_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MADDA_S
+#define IPSX2_FPU_FLUSHOP_MADDA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MAX_S
+#define IPSX2_FPU_FLUSHOP_MAX_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MIN_S
+#define IPSX2_FPU_FLUSHOP_MIN_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MOV_S
+#define IPSX2_FPU_FLUSHOP_MOV_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MSUB_S
+#define IPSX2_FPU_FLUSHOP_MSUB_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MSUBA_S
+#define IPSX2_FPU_FLUSHOP_MSUBA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MUL_S
+#define IPSX2_FPU_FLUSHOP_MUL_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MULA_S
+#define IPSX2_FPU_FLUSHOP_MULA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_NEG_S
+#define IPSX2_FPU_FLUSHOP_NEG_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SUB_S
+#define IPSX2_FPU_FLUSHOP_SUB_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SUBA_S
+#define IPSX2_FPU_FLUSHOP_SUBA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SQRT_S
+#define IPSX2_FPU_FLUSHOP_SQRT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_RSQRT_S
+#define IPSX2_FPU_FLUSHOP_RSQRT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_CVT_S
+#define IPSX2_FPU_FLUSHOP_CVT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_CVT_W
+#define IPSX2_FPU_FLUSHOP_CVT_W (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
 #endif
 void iPSX2_FpuVerifyBefore();
 void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name);
@@ -276,13 +346,13 @@ void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name);
 			armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::fn)); \
 			return; \
 		} \
-		if (IPSX2_FPU_VERIFY) \
+		if (IPSX2_FPU_FLUSHOP_##fn) \
 			iPSX2_FpuVerifyEmitBefore(); \
 		if (CHECK_FPU_FULL) \
 			eeFPURecompileCode(DOUBLE::rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
 		else \
 			eeFPURecompileCode(rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
-		if (IPSX2_FPU_VERIFY) \
+		if (IPSX2_FPU_FLUSHOP_##fn) \
 			iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::fn, #fn); \
 	}
 

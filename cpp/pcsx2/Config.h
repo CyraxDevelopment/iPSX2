@@ -1500,7 +1500,22 @@ namespace EmuFolders
 // [iPSX2 EE bisect] Build with -DIPSX2_NO_<GROUP>_RECOMPILE to run one instruction group
 // through the interpreter while the rest stays on the JIT (see .github/workflows/ee-bisect.yml).
 // The tag string lands in the binary so a built IPA can be checked for its variant.
-#if defined(IPSX2_SQRTFIX_BUILD)
+#if 0
+#elif defined(IPSX2_FLUSH_GROUP_ADDSUB)
+#define IPSX2_EE_BISECT_TAG "flush-ADDSUB"
+#elif defined(IPSX2_FLUSH_GROUP_MUL)
+#define IPSX2_EE_BISECT_TAG "flush-MUL"
+#elif defined(IPSX2_FLUSH_GROUP_MADD)
+#define IPSX2_EE_BISECT_TAG "flush-MADD"
+#elif defined(IPSX2_FLUSH_GROUP_DIV)
+#define IPSX2_EE_BISECT_TAG "flush-DIV"
+#elif defined(IPSX2_FLUSH_GROUP_CMP)
+#define IPSX2_EE_BISECT_TAG "flush-CMP"
+#elif defined(IPSX2_FLUSH_GROUP_MISC)
+#define IPSX2_EE_BISECT_TAG "flush-MISC"
+#elif defined(IPSX2_FLUSH_GROUP_CVT)
+#define IPSX2_EE_BISECT_TAG "flush-CVT"
+#elif defined(IPSX2_SQRTFIX_BUILD)
 #define IPSX2_EE_BISECT_TAG "sqrt-fix"
 #elif defined(IPSX2_FPU_FLUSH_BUILD)
 #define IPSX2_EE_BISECT_TAG "fpu-flush-oldsqrt"

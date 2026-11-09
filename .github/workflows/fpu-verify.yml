@@ -12,10 +12,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: SQRTFIX
-            flags: "-DIPSX2_SQRTFIX_BUILD"
-          - group: FLUSH
-            flags: "-DIPSX2_FPU_FLUSH_BUILD -DIPSX2_FPU_FLUSH_AROUND=1 -DIPSX2_SQRT_OLD_FPCR"
+          - group: ADDSUB
+            flags: "-DIPSX2_FLUSH_GROUP_ADDSUB -DIPSX2_FPU_FLUSHOP_ADD_S=1 -DIPSX2_FPU_FLUSHOP_SUB_S=1 -DIPSX2_FPU_FLUSHOP_ADDA_S=1 -DIPSX2_FPU_FLUSHOP_SUBA_S=1"
+          - group: MUL
+            flags: "-DIPSX2_FLUSH_GROUP_MUL -DIPSX2_FPU_FLUSHOP_MUL_S=1 -DIPSX2_FPU_FLUSHOP_MULA_S=1"
+          - group: MADD
+            flags: "-DIPSX2_FLUSH_GROUP_MADD -DIPSX2_FPU_FLUSHOP_MADD_S=1 -DIPSX2_FPU_FLUSHOP_MADDA_S=1 -DIPSX2_FPU_FLUSHOP_MSUB_S=1 -DIPSX2_FPU_FLUSHOP_MSUBA_S=1"
+          - group: DIV
+            flags: "-DIPSX2_FLUSH_GROUP_DIV -DIPSX2_FPU_FLUSHOP_DIV_S=1 -DIPSX2_FPU_FLUSHOP_SQRT_S=1 -DIPSX2_FPU_FLUSHOP_RSQRT_S=1"
+          - group: CMP
+            flags: "-DIPSX2_FLUSH_GROUP_CMP -DIPSX2_FPU_FLUSHOP_C_EQ=1 -DIPSX2_FPU_FLUSHOP_C_LE=1 -DIPSX2_FPU_FLUSHOP_C_LT=1"
+          - group: MISC
+            flags: "-DIPSX2_FLUSH_GROUP_MISC -DIPSX2_FPU_FLUSHOP_ABS_S=1 -DIPSX2_FPU_FLUSHOP_NEG_S=1 -DIPSX2_FPU_FLUSHOP_MOV_S=1 -DIPSX2_FPU_FLUSHOP_MAX_S=1 -DIPSX2_FPU_FLUSHOP_MIN_S=1"
+          - group: CVT
+            flags: "-DIPSX2_FLUSH_GROUP_CVT -DIPSX2_FPU_FLUSHOP_CVT_S=1 -DIPSX2_FPU_FLUSHOP_CVT_W=1"
 
     env:
       SCHEME: iPSX2
@@ -58,7 +68,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-fpu-${{ matrix.group }}
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-flush-${{ matrix.group }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-
           max-size: 2G
@@ -236,7 +246,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: iPSX2-fpu-${{ matrix.group }}
+          name: iPSX2-flush-${{ matrix.group }}
           path: ${{ env.IPA_PATH }}
           retention-days: 30
           if-no-files-found: error

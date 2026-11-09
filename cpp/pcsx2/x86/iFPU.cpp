@@ -1270,11 +1270,11 @@ void recCVT_S()
 		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_S));
 		return;
 	}
-	if (IPSX2_FPU_VERIFY)
+	if (IPSX2_FPU_FLUSHOP_CVT_S)
 		iPSX2_FpuVerifyEmitBefore();
 	// Float version is fully accurate, no double version
 	eeFPURecompileCode(recCVT_S_xmm, R5900::Interpreter::OpcodeImpl::COP1::CVT_S, XMMINFO_WRITED | XMMINFO_READS);
-	if (IPSX2_FPU_VERIFY)
+	if (IPSX2_FPU_FLUSHOP_CVT_S)
 		iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::CVT_S, "CVT_S");
 }
 
@@ -1288,10 +1288,10 @@ void recCVT_W()
 		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_W));
 		return;
 	}
-	if (IPSX2_FPU_VERIFY)
+	if (IPSX2_FPU_FLUSHOP_CVT_W)
 		iPSX2_FpuVerifyEmitBefore();
 	recCVT_W_jit();
-	if (IPSX2_FPU_VERIFY)
+	if (IPSX2_FPU_FLUSHOP_CVT_W)
 		iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::CVT_W, "CVT_W");
 }
 
@@ -2726,7 +2726,7 @@ void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name)
 void iPSX2_FpuVerifyEmitBefore()
 {
 	iFlushCall(FLUSH_INTERPRETER);
-	if (IPSX2_FPU_FLUSH_AROUND)
+	if (!IPSX2_FPU_VERIFY)
 		return;
 	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyBefore));
 }
@@ -2734,7 +2734,7 @@ void iPSX2_FpuVerifyEmitBefore()
 void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
 {
 	iFlushCall(FLUSH_INTERPRETER);
-	if (IPSX2_FPU_FLUSH_AROUND)
+	if (!IPSX2_FPU_VERIFY)
 		return;
 	armAsm->Mov(RXARG1, static_cast<u64>(reinterpret_cast<uptr>(interp)));
 	armAsm->Mov(RXARG2, static_cast<u64>(reinterpret_cast<uptr>(name)));
