@@ -37,6 +37,8 @@ struct GameCheatsView: View {
     @Binding var revision: Int
 
     @State private var cheats: [GameCheat] = []
+    /// Built-in game patches (Documents/patches and the bundled patches.zip).
+    @State private var patches: [GameCheat] = []
     @State private var unlabelled = 0
     @State private var showImporter = false
     @State private var importMessage: String?
@@ -52,6 +54,18 @@ struct GameCheatsView: View {
 
     var body: some View {
         List {
+            if !patches.isEmpty {
+                Section {
+                    ForEach(patches) { patch in
+                        patchRow(patch)
+                    }
+                } header: {
+                    Text("Built-in Patches")
+                } footer: {
+                    Text("Fixes and enhancements shipped with the emulator (patches.zip) or placed in Documents/patches. They work without turning cheats on. Widescreen and No-Interlacing follow the switches under Settings › Patches unless you change them here.")
+                }
+            }
+
             if cheats.isEmpty && unlabelled == 0 {
                 Section { emptyState }
             }
@@ -85,7 +99,7 @@ struct GameCheatsView: View {
                 Text("Cheat files live in Documents/cheats and are matched to a game by its serial and CRC. You can also copy them there with the Files app.")
             }
         }
-        .navigationTitle("Cheat Codes")
+        .navigationTitle("Patches & Cheats")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item]) { result in
             guard case .success(let url) = result else { return }
@@ -147,9 +161,31 @@ struct GameCheatsView: View {
         }
     }
 
+    @ViewBuilder
+    private func patchRow(_ patch: GameCheat) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { patch.enabled },
+                set: { on in
+                    iPSX2Bridge.setPatch(patch.name, enabled: on, globallyToggleable: patch.globallyToggleable)
+                    revision += 1
+                    reload()
+                }
+            )) {
+                Text(patch.name)
+            }
+            if !patch.details.isEmpty {
+                Text(patch.details).font(.caption).foregroundStyle(.secondary)
+            }
+            if !patch.author.isEmpty {
+                Text("by \(patch.author)").font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("No codes found for this game", systemImage: "key.slash")
+            Label("No cheat codes found for this game", systemImage: "key.slash")
                 .font(.body)
             Text("Put a .pnach file for \(game.serial.isEmpty ? "this game" : game.serial) in Documents/cheats, or import one below. The filename must contain the game's serial — for example \(exampleFilename).")
                 .font(.caption)
@@ -164,6 +200,7 @@ struct GameCheatsView: View {
     }
 
     private func reload() {
+        patches = iPSX2Bridge.patches(forEntryPath: game.path).map { GameCheat($0) }
         cheats = iPSX2Bridge.cheats(forEntryPath: game.path).map { GameCheat($0) }
         unlabelled = Int(iPSX2Bridge.unlabelledCheatCount(forEntryPath: game.path))
     }

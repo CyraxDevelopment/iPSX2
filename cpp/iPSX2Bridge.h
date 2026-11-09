@@ -278,6 +278,11 @@ extern NSString * _Nonnull const iPSX2PatchKeyGloballyToggleable; // NSNumber BO
 + (NSUInteger)unlabelledCheatCountForEntryPath:(nonnull NSString *)path;
 /// Requires an open game-settings edit; the tick is stored in the per-game INI.
 + (void)setCheat:(nonnull NSString *)name enabled:(BOOL)enabled;
+/// [TWEAK] Built-in game patches for one game: Documents/patches plus the bundled patches.zip
+/// (fixes, widescreen, no-interlacing, 60 fps …). Same dictionary keys as cheats.
++ (nonnull NSArray<NSDictionary<NSString *, id> *> *)patchesForEntryPath:(nonnull NSString *)path;
+/// Requires an open game-settings edit. Stored in the per-game INI [Patches] section.
++ (void)setPatch:(nonnull NSString *)name enabled:(BOOL)enabled globallyToggleable:(BOOL)globallyToggleable;
 + (nonnull NSString *)cheatsDirectory;
 /// Copies a .pnach into the cheats folder, keeping its filename. Returns NO on a failed copy.
 + (BOOL)importPnachAtPath:(nonnull NSString *)path;

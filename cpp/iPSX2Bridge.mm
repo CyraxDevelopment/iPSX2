@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #import "iPSX2Bridge.h"
+#include <optional>
 #include <SDL3/SDL.h>
 
 extern "C" void iPSX2_SetSDLFullscreen(bool enabled);
@@ -1166,6 +1167,83 @@ static void SaveGameSettingsEdit()
         }];
     }
     return out;
+}
+
+// [TWEAK] Built-in patches. The zip handle is guarded by a mutex in Patch.cpp, so listing it
+// here is safe while a game is running.
+static NSString* const kWSPatchName = @"Widescreen 16:9";
+static NSString* const kNIPatchName = @"No-Interlacing";
+
++ (nonnull NSArray<NSDictionary<NSString *, id> *> *)patchesForEntryPath:(nonnull NSString *)path {
+    std::string serial;
+    u32 crc = 0;
+    if (!GameKeyForEntryPath(path, &serial, &crc))
+        return @[];
+
+    Patch::PatchInfoList list = Patch::GetPatchInfo(serial, crc, false, true, nullptr);
+    std::sort(list.begin(), list.end(),
+              [](const Patch::PatchInfo& a, const Patch::PatchInfo& b) { return a.name < b.name; });
+
+    std::vector<std::string> enabled, disabled;
+    std::optional<bool> game_ws, game_ni;
+    auto read_from = [&](SettingsInterface& si) {
+        enabled  = si.GetStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_ENABLE_CONFIG_KEY);
+        disabled = si.GetStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_DISABLE_CONFIG_KEY);
+        bool v;
+        if (si.GetBoolValue("EmuCore", "EnableWideScreenPatches", &v)) game_ws = v;
+        if (si.GetBoolValue("EmuCore", "EnableNoInterlacingPatches", &v)) game_ni = v;
+    };
+    if (s_game_settings_edit && s_game_settings_crc == crc) {
+        read_from(*s_game_settings_edit);
+    } else {
+        INISettingsInterface si(VMManager::GetGameSettingsPath(serial, crc));
+        if (si.Load())
+            read_from(si);
+    }
+    // The Widescreen / No-Interlacing switches turn their patch on by name unless the game lists
+    // it under Disable; show the state the core will actually use.
+    const bool ws_on = game_ws.value_or(Host::GetBaseBoolSettingValue("EmuCore", "EnableWideScreenPatches", false));
+    const bool ni_on = game_ni.value_or(Host::GetBaseBoolSettingValue("EmuCore", "EnableNoInterlacingPatches", false));
+
+    auto contains = [](const std::vector<std::string>& v, const std::string& n) {
+        return std::find(v.begin(), v.end(), n) != v.end();
+    };
+
+    NSMutableArray* out = [NSMutableArray arrayWithCapacity:list.size()];
+    for (const Patch::PatchInfo& p : list) {
+        const bool toggleable = Patch::IsGloballyToggleablePatch(p);
+        bool is_enabled = contains(enabled, p.name);
+        if (toggleable && !is_enabled && !contains(disabled, p.name)) {
+            NSString* n = NSStr(p.name);
+            is_enabled = ([n isEqualToString:kWSPatchName] && ws_on) || ([n isEqualToString:kNIPatchName] && ni_on);
+        }
+        [out addObject:@{
+            iPSX2PatchKeyName               : NSStr(p.name),
+            iPSX2PatchKeyDisplayName        : NSStr(std::string(p.GetNamePart())),
+            iPSX2PatchKeyGroup              : NSStr(std::string(p.GetNameParentPart())),
+            iPSX2PatchKeyDescription        : NSStr(p.description),
+            iPSX2PatchKeyAuthor             : NSStr(p.author),
+            iPSX2PatchKeyEnabled            : @(is_enabled),
+            iPSX2PatchKeyGloballyToggleable : @(toggleable),
+        }];
+    }
+    return out;
+}
+
++ (void)setPatch:(nonnull NSString *)name enabled:(BOOL)enabled globallyToggleable:(BOOL)globallyToggleable {
+    if (!s_game_settings_edit)
+        return;
+    const char* n = name.UTF8String;
+    if (enabled) {
+        s_game_settings_edit->AddToStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_ENABLE_CONFIG_KEY, n);
+        s_game_settings_edit->RemoveFromStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_DISABLE_CONFIG_KEY, n);
+    } else {
+        s_game_settings_edit->RemoveFromStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_ENABLE_CONFIG_KEY, n);
+        // A global switch would turn it back on by name, so it has to be listed as disabled.
+        if (globallyToggleable)
+            s_game_settings_edit->AddToStringList(Patch::PATCHES_CONFIG_SECTION, Patch::PATCH_DISABLE_CONFIG_KEY, n);
+    }
+    SaveGameSettingsEdit();
 }
 
 + (NSUInteger)unlabelledCheatCountForEntryPath:(nonnull NSString *)path {

@@ -46,10 +46,10 @@ struct GameTweaksView: View {
                 NavigationLink {
                     GameCheatsView(game: game, revision: $revision)
                 } label: {
-                    Label("Cheat Codes", systemImage: "key")
+                    Label("Patches & Cheats", systemImage: "key")
                 }
             } footer: {
-                Text("Codes come from .pnach files in the cheats folder. Turning a code on here also needs Enable Cheats above, or the global switch.")
+                Text("Built-in patches (fixes, widescreen, 60 fps …) can be turned on directly. Cheat codes come from .pnach files in the cheats folder and also need Enable Cheats above, or the global switch.")
             }
 
             Section {
@@ -59,7 +59,7 @@ struct GameTweaksView: View {
                     Text("Reset All to Global")
                 }
             } footer: {
-                Text("Removes every override for this game, including which cheat codes are on. The global settings are untouched.")
+                Text("Removes every override for this game, including which patches and cheat codes are on. The global settings are untouched.")
             }
         }
         .navigationTitle(game.title)
@@ -73,7 +73,12 @@ struct GameTweaksView: View {
         } message: {
             Text("\(game.title) will go back to following every global setting.")
         }
-        .onAppear { _ = iPSX2Bridge.openGameSettings(forEntryPath: game.path) }
+        .onAppear {
+            _ = iPSX2Bridge.openGameSettings(forEntryPath: game.path)
+            // [iPSX2] Re-read on every appearance: the "Global (…)" labels come from the global
+            // INI, which the Settings tab may have changed while this screen was off-screen.
+            revision += 1
+        }
         .onDisappear { iPSX2Bridge.closeGameSettings() }
     }
 

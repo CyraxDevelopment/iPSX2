@@ -48,8 +48,12 @@ struct PadLayoutEditView: View {
                             .padding(.bottom, 6)
                         }
                     }
-                    .ignoresSafeArea()
                 }
+                // [iPSX2] The in-game pad lays out on the whole landscape screen (GameScreenView
+                // ignores the safe area), so the editor must measure the same area. Ignoring the
+                // safe area only on the inner ZStack left geo.size inset by the notch/home
+                // indicator while drawing from the screen edge, so positions came out ~10% off.
+                .ignoresSafeArea()
             } else {
                 GeometryReader { geo in
                     ZStack {
