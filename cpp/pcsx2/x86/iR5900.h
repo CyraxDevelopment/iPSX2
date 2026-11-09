@@ -181,9 +181,86 @@ void eeRecompileCodeRC1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 // rd = rt op sa
 void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int xmminfo);
 
+// [iPSX2 FPU bisect] -DIPSX2_FPU_INTERP_<OP>=1 runs that one FPU op through the interpreter
+// (same fallback as building without FPU_RECOMPILE); 0 = normal JIT. See fpu-bisect.yml.
+#ifndef IPSX2_FPU_INTERP_ABS_S
+#define IPSX2_FPU_INTERP_ABS_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_ADD_S
+#define IPSX2_FPU_INTERP_ADD_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_ADDA_S
+#define IPSX2_FPU_INTERP_ADDA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_EQ
+#define IPSX2_FPU_INTERP_C_EQ 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_LE
+#define IPSX2_FPU_INTERP_C_LE 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_LT
+#define IPSX2_FPU_INTERP_C_LT 0
+#endif
+#ifndef IPSX2_FPU_INTERP_DIV_S
+#define IPSX2_FPU_INTERP_DIV_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MADD_S
+#define IPSX2_FPU_INTERP_MADD_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MADDA_S
+#define IPSX2_FPU_INTERP_MADDA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MAX_S
+#define IPSX2_FPU_INTERP_MAX_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MIN_S
+#define IPSX2_FPU_INTERP_MIN_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MOV_S
+#define IPSX2_FPU_INTERP_MOV_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MSUB_S
+#define IPSX2_FPU_INTERP_MSUB_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MSUBA_S
+#define IPSX2_FPU_INTERP_MSUBA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MUL_S
+#define IPSX2_FPU_INTERP_MUL_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MULA_S
+#define IPSX2_FPU_INTERP_MULA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_NEG_S
+#define IPSX2_FPU_INTERP_NEG_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SUB_S
+#define IPSX2_FPU_INTERP_SUB_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SUBA_S
+#define IPSX2_FPU_INTERP_SUBA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SQRT_S
+#define IPSX2_FPU_INTERP_SQRT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_RSQRT_S
+#define IPSX2_FPU_INTERP_RSQRT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_CVT_S
+#define IPSX2_FPU_INTERP_CVT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_CVT_W
+#define IPSX2_FPU_INTERP_CVT_W 0
+#endif
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
 	void rec##fn(void) \
 	{ \
+		if (IPSX2_FPU_INTERP_##fn) \
+		{ \
+			iFlushCall(FLUSH_INTERPRETER); \
+			armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::fn)); \
+			return; \
+		} \
 		if (CHECK_FPU_FULL) \
 			eeFPURecompileCode(DOUBLE::rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
 		else \

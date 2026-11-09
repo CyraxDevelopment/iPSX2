@@ -1522,6 +1522,20 @@ namespace EmuFolders
 #define IPSX2_EE_BISECT_TAG "no-MULTDIV"
 #elif defined(IPSX2_NO_CP0_RECOMPILE)
 #define IPSX2_EE_BISECT_TAG "no-CP0"
+#elif defined(IPSX2_FPU_BISECT_ADDSUB)
+#define IPSX2_EE_BISECT_TAG "fpu-ADDSUB"
+#elif defined(IPSX2_FPU_BISECT_MUL)
+#define IPSX2_EE_BISECT_TAG "fpu-MUL"
+#elif defined(IPSX2_FPU_BISECT_MADD)
+#define IPSX2_EE_BISECT_TAG "fpu-MADD"
+#elif defined(IPSX2_FPU_BISECT_DIV)
+#define IPSX2_EE_BISECT_TAG "fpu-DIV"
+#elif defined(IPSX2_FPU_BISECT_CMP)
+#define IPSX2_EE_BISECT_TAG "fpu-CMP"
+#elif defined(IPSX2_FPU_BISECT_MISC)
+#define IPSX2_EE_BISECT_TAG "fpu-MISC"
+#elif defined(IPSX2_FPU_BISECT_CVT)
+#define IPSX2_EE_BISECT_TAG "fpu-CVT"
 #endif
 #ifdef IPSX2_EE_BISECT_TAG
 [[maybe_unused]] __attribute__((used)) static const char s_ipsx2_ee_bisect_tag[] = "iPSX2-ee-bisect:" IPSX2_EE_BISECT_TAG;

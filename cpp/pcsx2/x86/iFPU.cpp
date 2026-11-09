@@ -1264,12 +1264,24 @@ void recCVT_S_xmm(int info)
 
 void recCVT_S()
 {
+	if (IPSX2_FPU_INTERP_CVT_S)
+	{
+		iFlushCall(FLUSH_INTERPRETER);
+		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_S));
+		return;
+	}
 	// Float version is fully accurate, no double version
 	eeFPURecompileCode(recCVT_S_xmm, R5900::Interpreter::OpcodeImpl::COP1::CVT_S, XMMINFO_WRITED | XMMINFO_READS);
 }
 
 void recCVT_W()
 {
+	if (IPSX2_FPU_INTERP_CVT_W)
+	{
+		iFlushCall(FLUSH_INTERPRETER);
+		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_W));
+		return;
+	}
 	// Float version is fully accurate, no double version
 
 	// If we have the following EmitOP() on the top then it'll get calculated twice when CHECK_FPU_FULL is true
