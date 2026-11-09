@@ -1047,10 +1047,12 @@ void recSQC2()
 }
 
 #else
-//namespace Interp = R5900::Interpreter::OpcodeImpl;
+// Interpreter fallback when LOADSTORE or CP2 recompilation is disabled (was commented out,
+// which left recLQC2/recSQC2 undefined at link time).
+namespace Interp = R5900::Interpreter::OpcodeImpl;
 
-//REC_FUNC(LQC2);
-//REC_FUNC(SQC2);
+REC_FUNC(LQC2);
+REC_FUNC(SQC2);
 
 #endif
 

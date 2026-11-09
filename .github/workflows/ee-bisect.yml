@@ -4,6 +4,11 @@ name: EE Recompiler Bisect
 # the interpreter (the rest stays on the JIT). Used to find which group miscompiles.
 on:
   workflow_dispatch:
+    inputs:
+      groups:
+        description: 'JSON array of EE instruction groups to build (one IPA each)'
+        required: false
+        default: '["FPU","CP2","LOADSTORE","MOVE","ARITHMETIC","ARITHMETICIMM","BRANCH","JUMP","SHIFT","MULTDIV","CP0"]'
 
 jobs:
   build-ipa:
@@ -12,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [FPU, CP2, LOADSTORE, MOVE, ARITHMETIC, ARITHMETICIMM, BRANCH, JUMP, SHIFT, MULTDIV, CP0]
+        group: ${{ fromJSON(inputs.groups || '["FPU","CP2","LOADSTORE","MOVE","ARITHMETIC","ARITHMETICIMM","BRANCH","JUMP","SHIFT","MULTDIV","CP0"]') }}
 
     env:
       SCHEME: iPSX2
