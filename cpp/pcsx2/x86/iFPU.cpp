@@ -1270,9 +1270,15 @@ void recCVT_S()
 		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_S));
 		return;
 	}
+	if (IPSX2_FPU_VERIFY)
+		iPSX2_FpuVerifyEmitBefore();
 	// Float version is fully accurate, no double version
 	eeFPURecompileCode(recCVT_S_xmm, R5900::Interpreter::OpcodeImpl::COP1::CVT_S, XMMINFO_WRITED | XMMINFO_READS);
+	if (IPSX2_FPU_VERIFY)
+		iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::CVT_S, "CVT_S");
 }
+
+static void recCVT_W_jit();
 
 void recCVT_W()
 {
@@ -1282,6 +1288,15 @@ void recCVT_W()
 		armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::CVT_W));
 		return;
 	}
+	if (IPSX2_FPU_VERIFY)
+		iPSX2_FpuVerifyEmitBefore();
+	recCVT_W_jit();
+	if (IPSX2_FPU_VERIFY)
+		iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::CVT_W, "CVT_W");
+}
+
+static void recCVT_W_jit()
+{
 	// Float version is fully accurate, no double version
 
 	// If we have the following EmitOP() on the top then it'll get calculated twice when CHECK_FPU_FULL is true
@@ -2231,7 +2246,9 @@ void recSQRT_S_xmm(int info)
 		roundmode_nearest = EmuConfig.Cpu.FPUFPCR;
 		roundmode_nearest.SetRoundMode(FPRoundMode::Nearest);
 //		xLDMXCSR(ptr32[&roundmode_nearest.bitmask]);
-        armAsm->Msr(a64::FPCR, armLoad64(PTR_CPU(Cpu.FPUFPCR.bitmask)));
+        // [iPSX2] was reloading Cpu.FPUFPCR here, so SQRT never actually switched to nearest.
+        armAsm->Mov(RAX, static_cast<u64>(roundmode_nearest.bitmask));
+        armAsm->Msr(a64::FPCR, RAX);
 		roundmodeFlag = true;
 	}
 
@@ -2473,3 +2490,245 @@ FPURECOMPILE_CONSTCODE(RSQRT_S, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT);
 } // namespace OpcodeImpl
 } // namespace Dynarec
 } // namespace R5900
+
+//------------------------------------------------------------------
+// [iPSX2 FPU verify] JIT-vs-interpreter cross-check (see IPSX2_FPU_VERIFY in iR5900.h).
+// Before the JIT op: snapshot fpuRegs. After it: keep the JIT state, rerun the interpreter
+// on the snapshot, compare, then put the JIT state back so the game sees only JIT results.
+//------------------------------------------------------------------
+#include "Config.h"
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <string>
+
+namespace
+{
+	struct VerifyOpStat
+	{
+		const char* name;
+		u64 checks, exact, tiny, zerosign, big, cflag, flags;
+	};
+
+	VerifyOpStat s_vstat[48];
+	int s_vstat_count = 0;
+	fpuRegisters s_vpre;
+	std::FILE* s_vlog = nullptr;
+	bool s_vlog_failed = false;
+	u64 s_vchecks = 0;
+	u64 s_vnext_summary = 1u << 20;
+	u32 s_vlines = 0;
+	constexpr u32 VERIFY_MAX_LINES = 20000;
+
+	// pc -> how many lines already logged for it (open addressing, never shrinks)
+	constexpr u32 PC_TABLE = 16384;
+	u32 s_vpc_key[PC_TABLE];
+	u8 s_vpc_cnt[PC_TABLE];
+	u32 s_vpc_used = 0;
+
+	std::FILE* VerifyLog()
+	{
+		if (!s_vlog && !s_vlog_failed)
+		{
+			const std::string path = EmuFolders::DataRoot + "/fpu_verify.txt";
+			s_vlog = std::fopen(path.c_str(), "w");
+			if (!s_vlog)
+				s_vlog_failed = true;
+			else
+				std::fprintf(s_vlog, "# iPSX2 FPU verify: JIT result vs interpreter on the same input.\n"
+									 "# pc = address of the FPU instruction. tiny = <=2 ulp, same sign. big = anything else.\n"
+									 "# FPCR at check time = %016llx\n",
+					(unsigned long long)EmuConfig.Cpu.FPUFPCR.bitmask);
+		}
+		return s_vlog;
+	}
+
+	VerifyOpStat& OpStat(const char* name)
+	{
+		for (int i = 0; i < s_vstat_count; i++)
+			if (s_vstat[i].name == name)
+				return s_vstat[i];
+		for (int i = 0; i < s_vstat_count; i++)
+			if (std::strcmp(s_vstat[i].name, name) == 0)
+				return s_vstat[i];
+		if (s_vstat_count < (int)(sizeof(s_vstat) / sizeof(s_vstat[0])))
+		{
+			VerifyOpStat& st = s_vstat[s_vstat_count++];
+			std::memset(&st, 0, sizeof(st));
+			st.name = name;
+			return st;
+		}
+		return s_vstat[0];
+	}
+
+	// how many lines this pc has had; bumps the count
+	u32 PcHits(u32 pc)
+	{
+		u32 h = (pc * 2654435761u) & (PC_TABLE - 1);
+		for (u32 n = 0; n < PC_TABLE; n++, h = (h + 1) & (PC_TABLE - 1))
+		{
+			if (s_vpc_cnt[h] == 0)
+			{
+				if (s_vpc_used >= PC_TABLE - 64)
+					return 255; // table full: treat as already logged
+				s_vpc_used++;
+				s_vpc_key[h] = pc;
+				s_vpc_cnt[h] = 1;
+				return 0;
+			}
+			if (s_vpc_key[h] == pc)
+			{
+				const u32 c = s_vpc_cnt[h];
+				if (c < 255)
+					s_vpc_cnt[h]++;
+				return c;
+			}
+		}
+		return 255;
+	}
+
+	s64 Ordered(u32 x)
+	{
+		return (x & 0x80000000u) ? -(s64)(x & 0x7fffffffu) : (s64)x;
+	}
+
+	float AsF(u32 x)
+	{
+		float f;
+		std::memcpy(&f, &x, 4);
+		return f;
+	}
+
+	void WriteSummary(const char* why)
+	{
+		std::FILE* f = VerifyLog();
+		if (!f)
+			return;
+		std::fprintf(f, "== summary (%s) checks=%llu lines=%u\n", why, (unsigned long long)s_vchecks, s_vlines);
+		for (int i = 0; i < s_vstat_count; i++)
+		{
+			const VerifyOpStat& st = s_vstat[i];
+			std::fprintf(f, "   %-8s checks=%-10llu exact=%-10llu tiny=%-8llu zerosign=%-8llu BIG=%-8llu Cflag=%-8llu flags=%llu\n",
+				st.name, (unsigned long long)st.checks, (unsigned long long)st.exact, (unsigned long long)st.tiny,
+				(unsigned long long)st.zerosign, (unsigned long long)st.big, (unsigned long long)st.cflag,
+				(unsigned long long)st.flags);
+		}
+		std::fflush(f);
+	}
+
+	// 0 = equal, 1 = tiny, 2 = +0/-0, 3 = big
+	int Classify(u32 a, u32 b)
+	{
+		if (a == b)
+			return 0;
+		if (((a | b) & 0x7fffffffu) == 0)
+			return 2;
+		if ((a ^ b) & 0x80000000u)
+			return 3;
+		s64 d = Ordered(a) - Ordered(b);
+		if (d < 0)
+			d = -d;
+		return d <= 2 ? 1 : 3;
+	}
+} // namespace
+
+void iPSX2_FpuVerifyBefore()
+{
+	s_vpre = fpuRegs;
+}
+
+void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name)
+{
+	const fpuRegisters jit = fpuRegs;
+	fpuRegs = s_vpre;
+	interp();
+	const fpuRegisters ref = fpuRegs;
+	fpuRegs = jit;
+
+	VerifyOpStat& st = OpStat(name);
+	st.checks++;
+	s_vchecks++;
+
+	int worst = 0;
+	bool cdiff = false, flagdiff = false;
+	for (int i = 0; i < 32; i++)
+	{
+		const int c = Classify(jit.fpr[i].UL, ref.fpr[i].UL);
+		if (c > worst)
+			worst = c;
+	}
+	{
+		const int c = Classify(jit.ACC.UL, ref.ACC.UL);
+		if (c > worst)
+			worst = c;
+	}
+	if ((jit.fprc[31] ^ ref.fprc[31]) & 0x00800000u)
+		cdiff = true;
+	if ((jit.fprc[31] ^ ref.fprc[31]) & ~0x00800000u)
+		flagdiff = true;
+
+	switch (worst)
+	{
+		case 0: if (!cdiff) st.exact++; break;
+		case 1: st.tiny++; break;
+		case 2: st.zerosign++; break;
+		default: st.big++; break;
+	}
+	if (cdiff)
+		st.cflag++;
+	if (flagdiff)
+		st.flags++;
+
+	// Log big value mismatches and C-flag mismatches, a few times per pc.
+	if ((worst == 3 || cdiff) && s_vlines < VERIFY_MAX_LINES)
+	{
+		const u32 code = cpuRegs.code;
+		const u32 pc = cpuRegs.pc - 4;
+		if (PcHits(pc) < 4)
+		{
+			if (std::FILE* f = VerifyLog())
+			{
+				const u32 fs = (code >> 11) & 0x1f, ft = (code >> 16) & 0x1f, fd = (code >> 6) & 0x1f;
+				std::fprintf(f, "%s %-7s pc=%08x code=%08x fs=f%u[%08x %g] ft=f%u[%08x %g] fd=f%u acc=[%08x %g] fcr31=%08x\n",
+					cdiff && worst != 3 ? "CFLAG" : "BIG  ", name, pc, code,
+					fs, s_vpre.fpr[fs].UL, AsF(s_vpre.fpr[fs].UL), ft, s_vpre.fpr[ft].UL, AsF(s_vpre.fpr[ft].UL),
+					fd, s_vpre.ACC.UL, AsF(s_vpre.ACC.UL), s_vpre.fprc[31]);
+				for (int i = 0; i < 32; i++)
+					if (jit.fpr[i].UL != ref.fpr[i].UL)
+						std::fprintf(f, "      f%-2d jit=%08x %-14g ref=%08x %-14g (pre %08x)\n", i,
+							jit.fpr[i].UL, AsF(jit.fpr[i].UL), ref.fpr[i].UL, AsF(ref.fpr[i].UL), s_vpre.fpr[i].UL);
+				if (jit.ACC.UL != ref.ACC.UL)
+					std::fprintf(f, "      ACC jit=%08x %-14g ref=%08x %-14g (pre %08x)\n",
+						jit.ACC.UL, AsF(jit.ACC.UL), ref.ACC.UL, AsF(ref.ACC.UL), s_vpre.ACC.UL);
+				if (jit.fprc[31] != ref.fprc[31])
+					std::fprintf(f, "      fcr31 jit=%08x ref=%08x\n", jit.fprc[31], ref.fprc[31]);
+				std::fflush(f);
+				s_vlines++;
+				if (s_vlines == VERIFY_MAX_LINES)
+					std::fprintf(f, "# line limit reached, only summaries from here on\n");
+			}
+		}
+	}
+
+	if (s_vchecks == 1)
+		WriteSummary("first check");
+	if (s_vchecks >= s_vnext_summary)
+	{
+		s_vnext_summary = s_vchecks + (1u << 22);
+		WriteSummary("periodic");
+	}
+}
+
+void iPSX2_FpuVerifyEmitBefore()
+{
+	iFlushCall(FLUSH_INTERPRETER);
+	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyBefore));
+}
+
+void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
+{
+	iFlushCall(FLUSH_INTERPRETER);
+	armAsm->Mov(RXARG1, static_cast<u64>(reinterpret_cast<uptr>(interp)));
+	armAsm->Mov(RXARG2, static_cast<u64>(reinterpret_cast<uptr>(name)));
+	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyAfter));
+}

@@ -1500,7 +1500,9 @@ namespace EmuFolders
 // [iPSX2 EE bisect] Build with -DIPSX2_NO_<GROUP>_RECOMPILE to run one instruction group
 // through the interpreter while the rest stays on the JIT (see .github/workflows/ee-bisect.yml).
 // The tag string lands in the binary so a built IPA can be checked for its variant.
-#if defined(IPSX2_NO_FPU_RECOMPILE)
+#if defined(IPSX2_FPU_VERIFY_BUILD)
+#define IPSX2_EE_BISECT_TAG "fpu-VERIFY"
+#elif defined(IPSX2_NO_FPU_RECOMPILE)
 #define IPSX2_EE_BISECT_TAG "no-FPU"
 #elif defined(IPSX2_NO_CP2_RECOMPILE)
 #define IPSX2_EE_BISECT_TAG "no-CP2"

@@ -252,6 +252,17 @@ void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 #ifndef IPSX2_FPU_INTERP_CVT_W
 #define IPSX2_FPU_INTERP_CVT_W 0
 #endif
+// [iPSX2 FPU verify] -DIPSX2_FPU_VERIFY=1: every FPU op is JIT-compiled as normal, then re-run by the
+// interpreter on a snapshot of the pre-op FPU state. Mismatches go to Documents/fpu_verify.txt.
+// The JIT result is what the game keeps, so gameplay is unchanged apart from speed.
+#ifndef IPSX2_FPU_VERIFY
+#define IPSX2_FPU_VERIFY 0
+#endif
+void iPSX2_FpuVerifyBefore();
+void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name);
+void iPSX2_FpuVerifyEmitBefore();
+void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name);
+
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
 	void rec##fn(void) \
 	{ \
@@ -261,10 +272,14 @@ void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 			armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::fn)); \
 			return; \
 		} \
+		if (IPSX2_FPU_VERIFY) \
+			iPSX2_FpuVerifyEmitBefore(); \
 		if (CHECK_FPU_FULL) \
 			eeFPURecompileCode(DOUBLE::rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
 		else \
 			eeFPURecompileCode(rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
+		if (IPSX2_FPU_VERIFY) \
+			iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::fn, #fn); \
 	}
 
 // rd = rs op rt (all regs need to be in xmm)
