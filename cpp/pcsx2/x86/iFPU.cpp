@@ -2723,9 +2723,34 @@ void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name)
 	}
 }
 
+// [iPSX2] IPSX2_FPU_FLUSH_KIND: 0 = full interpreter flush, 1 = XMM registers only,
+// 2 = GPRs + constants only. Used to tell which register file the cache bug lives in.
+#ifndef IPSX2_FPU_FLUSH_KIND
+#define IPSX2_FPU_FLUSH_KIND 0
+#endif
+static void iPSX2_FpuFlush()
+{
+	if (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_KIND == 0)
+	{
+		iFlushCall(FLUSH_INTERPRETER);
+		return;
+	}
+	if (IPSX2_FPU_FLUSH_KIND == 1)
+	{
+		for (u32 i = 0; i < iREGCNT_XMM; i++)
+			if (xmmregs[i].inuse)
+				_freeXMMreg(i);
+	}
+	else
+	{
+		_flushConstRegs(true);
+		_freeX86regs();
+	}
+}
+
 void iPSX2_FpuVerifyEmitBefore()
 {
-	iFlushCall(FLUSH_INTERPRETER);
+	iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;
 	armEmitCall(reinterpret_cast<void*>(&iPSX2_FpuVerifyBefore));
@@ -2733,7 +2758,7 @@ void iPSX2_FpuVerifyEmitBefore()
 
 void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
 {
-	iFlushCall(FLUSH_INTERPRETER);
+	iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;
 	armAsm->Mov(RXARG1, static_cast<u64>(reinterpret_cast<uptr>(interp)));
