@@ -54,9 +54,21 @@ jobs:
       # 3. Install build tools
       # ──────────────────────────────────────────────────────────────────────────
       - name: Install build tools
+        # The runner images already ship cmake and xcbeautify. Only install what is missing:
+        # updating Homebrew and upgrading cmake costs minutes, and on the Intel image (no
+        # bottles any more) it compiles cmake from source.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
         run: |
-          brew update --quiet
-          brew install cmake xcbeautify || true
+          for tool in cmake xcbeautify; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "$tool: $("$tool" --version | head -1)"
+            else
+              brew install "$tool"
+            fi
+          done
 
       # ──────────────────────────────────────────────────────────────────────────
       # 4. ccache
