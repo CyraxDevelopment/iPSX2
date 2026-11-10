@@ -3979,7 +3979,7 @@ static __fi void GSVSync()
                 u32 addr = sp + off;
                 if (addr > 0x70003FFC) break;
                 u32 val = memRead32(addr);
-                if ((val & 0xFFF00000) == 0x9FC40000 || (val & 0xFFF00000) == 0x9FC00000) {
+                if ((val & 0xFFFF0000) == 0x9FC40000 || (val & 0xFFF00000) == 0x9FC00000) {
                     if (found_count < 4) {
                         Console.WriteLn("[TEMP_DIAG] @@SPR_RA_SCAN@@ "
                             "sp=%08x off=+%03x addr=%08x val=%08x",

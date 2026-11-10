@@ -5309,8 +5309,9 @@ static void recRecompile(const u32 startpc)
         }
     }
 
-    if (recomp_diag)
+    if (recomp_diag) {
         DevCon.WriteLn("@@RECOMPILE@@ pc=%08x", startpc);
+    }
         if (recomp_diag && startpc == 0xBFC02454) {
             static bool s_probe_2454_logged = false;
             if (!s_probe_2454_logged) {

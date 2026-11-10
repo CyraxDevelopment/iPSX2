@@ -359,7 +359,7 @@ int main(int argc, char* argv[]) {
 
         // 5. SDL + Window
         SDL_SetMainReady();
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD) < 0) {
+        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
             fprintf(stderr, "[P63] SDL_Init failed: %s\n", SDL_GetError());
             return 1;
         }
@@ -1142,7 +1142,7 @@ static INISettingsInterface* s_settings_interface = nullptr;
     static bool s_initialized = false;
     if (!s_initialized) {
         SDL_SetMainReady();
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD) < 0) {
+        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
             NSLog(@"SDL_Init failed: %s", SDL_GetError());
             return;
         }
