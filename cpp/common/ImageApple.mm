@@ -120,7 +120,7 @@ namespace
 
 		CFPtr<CGColorSpaceRef> cs(CGColorSpaceCreateDeviceRGB());
 		CFPtr<CGContextRef> ctx(CGBitmapContextCreate(pixels.data(), width, height, 8, width * sizeof(u32), cs.get(),
-			kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big));
+			static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedLast) | kCGBitmapByteOrder32Big));
 		if (!ctx)
 		{
 			Console.Error("ImageIO: could not create bitmap context for %s", what);
@@ -153,7 +153,7 @@ namespace
 			CGDataProviderCreateWithData(nullptr, image.GetPixels(), count * sizeof(u32), nullptr));
 		CFPtr<CGColorSpaceRef> cs(CGColorSpaceCreateDeviceRGB());
 		CFPtr<CGImageRef> cg(CGImageCreate(image.GetWidth(), image.GetHeight(), 8, 32, image.GetWidth() * sizeof(u32),
-			cs.get(), kCGImageAlphaLast | kCGBitmapByteOrder32Big, provider.get(), nullptr, false,
+			cs.get(), static_cast<CGBitmapInfo>(kCGImageAlphaLast) | kCGBitmapByteOrder32Big, provider.get(), nullptr, false,
 			kCGRenderingIntentDefault));
 		if (!cg)
 		{

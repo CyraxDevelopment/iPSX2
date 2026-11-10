@@ -101,6 +101,16 @@ endif()
 get_git_version_info()
 write_svnrev_h()
 
+# [iPSX2] Warning classes that PCSX2 relies on by design and that would otherwise make up
+# ~1000 lines of every build log: 64->32 bit narrowing in emulated 32-bit address math,
+# memset/memcpy on POD-like structs with constructors, and offsetof on the JIT's register
+# pack (non-standard-layout but fixed). Everything else stays visible.
+add_compile_options(
+	-Wno-shorten-64-to-32
+	-Wno-nontrivial-memcall
+	"$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-Wno-invalid-offsetof>"
+)
+
 # make common
 add_subdirectory(common)
 

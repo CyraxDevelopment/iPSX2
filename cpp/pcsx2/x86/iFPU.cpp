@@ -2759,7 +2759,8 @@ static void iPSX2_FpuFlush()
 #endif
 void iPSX2_FpuVerifyEmitBefore()
 {
-	if (IPSX2_FPU_VERIFY || (IPSX2_FPU_FLUSH_SIDE & 1))
+	constexpr bool flush_before = (IPSX2_FPU_VERIFY != 0) | ((IPSX2_FPU_FLUSH_SIDE & 1) != 0);
+	if (flush_before)
 		iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;
@@ -2768,7 +2769,8 @@ void iPSX2_FpuVerifyEmitBefore()
 
 void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name)
 {
-	if (IPSX2_FPU_VERIFY || (IPSX2_FPU_FLUSH_SIDE & 2))
+	constexpr bool flush_after = (IPSX2_FPU_VERIFY != 0) | ((IPSX2_FPU_FLUSH_SIDE & 2) != 0);
+	if (flush_after)
 		iPSX2_FpuFlush();
 	if (!IPSX2_FPU_VERIFY)
 		return;

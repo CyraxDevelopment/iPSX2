@@ -28,7 +28,7 @@ jobs:
       # 1. Checkout
       # ──────────────────────────────────────────────────────────────────────────
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -120,7 +120,7 @@ jobs:
           echo "Note: full compile_commands.json requires a Ninja iOS toolchain; stub written."
 
       - name: Upload compile_commands.json
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: compile-commands-${{ github.run_number }}
           path: ${{ env.BUILD_DIR }}/compile_commands.json
@@ -232,7 +232,7 @@ jobs:
       # 10. Upload IPA artifact
       # ──────────────────────────────────────────────────────────────────────────
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: iPSX2-unsigned-${{ github.run_number }}
           path: ${{ env.IPA_PATH }}
@@ -275,7 +275,7 @@ jobs:
       # ──────────────────────────────────────────────────────────────────────────
       - name: Upload build logs (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-logs-${{ github.run_number }}
           path: |
