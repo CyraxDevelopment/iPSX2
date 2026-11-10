@@ -12,6 +12,7 @@ import SwiftUI
 
 struct PatchSettingsView: View {
     @State private var settings = SettingsStore.shared
+    @AppStorage(CheatCollection.enabledKey) private var findCheatsOnline = true
 
     var body: some View {
         Form {
@@ -35,6 +36,12 @@ struct PatchSettingsView: View {
                 Text("Cheats")
             } footer: {
                 Text("Turns cheat codes on for every game. Off by default — cheats can break saves and progression. To enable them for one game only, and to choose which codes run, use the Tweaks tab.")
+            }
+
+            Section {
+                Toggle("Find Cheats Online", isOn: $findCheatsOnline)
+            } footer: {
+                Text("When you open a game's Patches & Cheats in the Tweaks tab, iPSX2 checks [pcsx2_cheats_collection](https://github.com/xs1l3n7x/pcsx2_cheats_collection) on GitHub for that game's serial and CRC. If it has codes you don't have yet, you're asked before anything is downloaded.")
             }
         }
         .navigationTitle("Patches & Cheats")

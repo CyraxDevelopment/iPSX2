@@ -31,6 +31,7 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - Game list with folders, covers, custom titles and play time.
 - Per-game Tweaks that follow the global setting until you override them.
 - Patches & Cheats per game: the built-in patches from `patches.zip`, your own `.pnach` files in `Documents/patches`, and cheat codes from `Documents/cheats`, each listed separately.
+- **Find Cheats Online:** when you open a game's Patches & Cheats, iPSX2 checks [pcsx2_cheats_collection](https://github.com/xs1l3n7x/pcsx2_cheats_collection) for that game and offers to download its codes. Nothing from the collection is bundled, and it can be turned off in Settings.
 - Save-state slots, speed control (fast-forward, slow motion, frame advance) and volume control.
 - A CPU engine picker (JIT / Interpreter) that writes the settings this core actually reads. Fastmem is on by default.
 - Virtual sticks respond to where your thumb is, so touching the rim moves straight away and circular motions register every direction.
@@ -94,6 +95,7 @@ swift/          SwiftUI frontend (views, settings, game list)
 - [ARMSX2](https://github.com/ARMSX2/ARMSX2), for the arm64 port
 - [Thiago-Heleno](https://github.com/Thiago-Heleno/iPSX2-src), for the original iOS port with JIT
 - [otti83](https://github.com/otti83), for their [iPSX2](https://github.com/otti83/iPSX2) frontend features ported here
+- [xs1l3n7x](https://github.com/xs1l3n7x/pcsx2_cheats_collection), for the cheat collection the app can download from
 - Third-party libraries vendored under `cpp/3rdparty/` (SDL3, VIXL, fmt, imgui, rapidyaml, libchdr, libzip, cubeb, rcheevos, freetype, soundtouch, lz4, lzma, zstd), each under its own license
 
 ## License

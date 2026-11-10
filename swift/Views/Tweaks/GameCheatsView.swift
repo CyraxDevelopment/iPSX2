@@ -43,6 +43,8 @@ struct GameCheatsView: View {
     /// Built-in game patches (Documents/patches and the bundled patches.zip).
     @State private var patches: [GameCheat] = []
     @State private var unlabelledPatches = 0
+    /// Codes for this game found in the online collection, offered until downloaded or dismissed.
+    @State private var offer: CheatCollection.Offer?
     @State private var unlabelled = 0
     @State private var showImporter = false
     @State private var importMessage: String?
@@ -58,6 +60,28 @@ struct GameCheatsView: View {
 
     var body: some View {
         List {
+            if let offer {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Ready-made cheats found", systemImage: "sparkles")
+                            .font(.headline)
+                        Text(offerSummary(offer))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                    Button {
+                        download(offer)
+                    } label: {
+                        Label("Download \(offer.codeNames.count) Code\(offer.codeNames.count == 1 ? "" : "s")", systemImage: "arrow.down.circle")
+                    }
+                    Button("Not Now") { self.offer = nil }
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text("From [pcsx2_cheats_collection](https://github.com/xs1l3n7x/pcsx2_cheats_collection) on GitHub, saved to Documents/cheats. You can turn this lookup off in Settings › Patches & Cheats.")
+                }
+            }
+
             let userPatches = patches.filter { !$0.builtIn }
             let builtInPatches = patches.filter { $0.builtIn }
 
@@ -158,6 +182,30 @@ struct GameCheatsView: View {
             reload()
         }
         .onDisappear { iPSX2Bridge.closeGameSettings() }
+        // Ask the online collection once per game; nothing is saved without the user's yes.
+        .task(id: game.crc) {
+            offer = await CheatCollection.lookUp(serial: game.serial, crc: game.crc,
+                                                 cheatsDirectory: iPSX2Bridge.cheatsDirectory())
+        }
+    }
+
+    private func offerSummary(_ offer: CheatCollection.Offer) -> String {
+        let shown = offer.codeNames.prefix(3)
+        let more = offer.codeNames.count - shown.count
+        let list = shown.joined(separator: ", ")
+        let count = offer.codeNames.count
+        let head = "\(count) code\(count == 1 ? "" : "s") for this game"
+        return more > 0 ? "\(head), including \(list) and \(more) more." : "\(head): \(list)."
+    }
+
+    private func download(_ offer: CheatCollection.Offer) {
+        if CheatCollection.save(offer, cheatsDirectory: iPSX2Bridge.cheatsDirectory()) {
+            importMessage = "Downloaded \(offer.codeNames.count) codes. Turn on the ones you want below. Cheats also need Enable Cheats for this game or the global switch."
+            self.offer = nil
+            reload()
+        } else {
+            importMessage = "Could not save \(offer.filename) into the cheats folder."
+        }
     }
 
     @ViewBuilder

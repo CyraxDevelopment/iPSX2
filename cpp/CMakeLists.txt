@@ -195,6 +195,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         ${CMAKE_SOURCE_DIR}/../swift/Models/PadLayoutStore.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/ScanFolderStore.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/GameTweaksStore.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Models/CheatCollection.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/EmulatorBridge.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/SwiftUIHost.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/AppState.swift
