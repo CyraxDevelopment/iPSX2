@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "macOS runner (use macos-15-intel when arm64 runners are out of capacity)"
+        type: choice
+        default: macos-latest
+        options: [macos-latest, macos-15-intel]
 
 permissions:
   contents: write   # needed to create the release for a version tag
@@ -14,7 +20,8 @@ permissions:
 jobs:
   build-ipa:
     name: Build Unsigned iPSX2.ipa
-    runs-on: macos-latest    # Apple Silicon runner (macos-14 image was retired)
+    # Apple Silicon by default; a manual run can pick the Intel image when arm64 capacity is short.
+    runs-on: ${{ inputs.runner || 'macos-latest' }}
 
     env:
       SCHEME: iPSX2
