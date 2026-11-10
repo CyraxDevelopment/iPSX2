@@ -2,6 +2,8 @@
 
 A PlayStation 2 emulator for iPhone and iPad, built on PCSX2 / ARMSX2 with a JIT recompiler for arm64.
 
+**Website:** [ipsx2.github.io](https://ipsx2.github.io) · **Downloads:** [Releases](../../releases)
+
 This is a standalone fork of [Thiago-Heleno/iPSX2-src](https://github.com/Thiago-Heleno/iPSX2-src). It keeps the JIT core and focuses on performance, accuracy fixes, and a more complete frontend.
 
 > iPSX2 does not include a PS2 BIOS or any games. You need to dump them from hardware you own.
