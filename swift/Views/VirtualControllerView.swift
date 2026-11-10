@@ -217,11 +217,7 @@ struct StickView: View {
     // on the rim did nothing until the finger moved, and a circular motion that started off-centre
     // never covered all directions, so "rotate the stick" prompts (God of War, God Hand) failed.
     /// Touches that start and stay within this distance of the centre count as an L3/R3 click.
-    private let clickRadius: CGFloat = 8
-    /// Finger distance from the centre that already counts as full deflection. A real stick sits
-    /// against its gate when rotated; a thumb circling on glass stays much closer to the centre,
-    /// so full tilt is reached at a little over half the knob's travel.
-    private var fullTiltRadius: CGFloat { (sz - knob) / 2 * 0.6 }
+    private let clickRadius: CGFloat = 10
 
     var body: some View {
         ZStack {
@@ -235,8 +231,7 @@ struct StickView: View {
                 .offset(y: sz / 2 + 8)
         }
         .frame(width: sz, height: sz)
-        // Accept touches a little outside the ring too: thumbs land off-target when moving fast.
-        .contentShape(Circle().inset(by: -14))
+        .contentShape(Circle())
         .simultaneousGesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { v in
                 let maxR = (sz - knob) / 2
@@ -249,11 +244,10 @@ struct StickView: View {
                     return
                 }
                 isDragging = true
+                let d = min(dist, maxR)
                 let a = atan2(dy, dx)
-                let tilt = min(dist / fullTiltRadius, 1)
-                // The knob shows the tilt the game sees, not the raw finger distance.
-                off = CGSize(width: cos(a) * tilt * maxR, height: sin(a) * tilt * maxR)
-                let mag = Float(tilt)
+                off = CGSize(width: cos(a) * d, height: sin(a) * d)
+                let mag = Float(d / maxR)
                 let nx = Float(cos(a)) * mag; let ny = Float(sin(a)) * mag
                 isLeft ? EmulatorBridge.shared.setLeftStick(x: nx, y: ny)
                        : EmulatorBridge.shared.setRightStick(x: nx, y: ny)
