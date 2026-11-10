@@ -3,9 +3,13 @@ name: Build Unsigned IPA
 on:
   push:
     branches: [main, master]
+    tags: ['v*']          # a version tag builds the IPA and drafts a GitHub Release with it
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the release for a version tag
 
 jobs:
   build-ipa:
@@ -234,6 +238,30 @@ jobs:
           path: ${{ env.IPA_PATH }}
           retention-days: 30
           if-no-files-found: error
+
+      # ──────────────────────────────────────────────────────────────────────────
+      # 10b. Version tag → draft GitHub Release with the IPA attached
+      #      The tag must match IPSX2_VERSION in cpp/CMakeLists.txt, so the app's
+      #      version string and the release name can never disagree.
+      # ──────────────────────────────────────────────────────────────────────────
+      - name: Draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          V=$(sed -nE 's/^set\(IPSX2_VERSION_(MAJOR|MINOR|PATCH) ([0-9]+)\)/\2/p' cpp/CMakeLists.txt | paste -sd. -)
+          if [ "v$V" != "$TAG" ]; then
+            echo "❌ Tag $TAG does not match IPSX2_VERSION $V in cpp/CMakeLists.txt"
+            exit 1
+          fi
+          OUT="iPSX2-$TAG.ipa"
+          cp "$IPA_PATH" "$OUT"
+          shasum -a 256 "$OUT" | tee "$OUT.sha256"
+          gh release create "$TAG" "$OUT" "$OUT.sha256" \
+            --draft --title "iPSX2 $TAG" --generate-notes --verify-tag
+          echo "✅ Draft release $TAG created"
 
       # ──────────────────────────────────────────────────────────────────────────
       # 11. ccache stats

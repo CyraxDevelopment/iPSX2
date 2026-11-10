@@ -182,7 +182,7 @@ void eeRecompileCodeRC1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int xmminfo);
 
 // [iPSX2 FPU bisect] -DIPSX2_FPU_INTERP_<OP>=1 runs that one FPU op through the interpreter
-// (same fallback as building without FPU_RECOMPILE); 0 = normal JIT. See fpu-bisect.yml.
+// (same fallback as building without FPU_RECOMPILE); 0 = normal JIT.
 #ifndef IPSX2_FPU_INTERP_ABS_S
 #define IPSX2_FPU_INTERP_ABS_S 0
 #endif
