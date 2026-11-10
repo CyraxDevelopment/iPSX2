@@ -19,32 +19,36 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 
 ## What's different in this fork
 
-**On `main`**
+**Emulation fixes**
 
-- Performance options exposed in Settings:
-  - **Emulator → Experimental:** MTVU (multi-threaded VU1). It was force-disabled on every launch before; now you can opt in.
-  - **Emulator → Speedhacks:** EE Cycle Skip (0–3). The EE Cycle Rate description, which had over/underclocking backwards, is corrected.
-  - **Graphics → Performance:** Skip Duplicate Frames and Hardware Download Mode (Accurate / No Readbacks / Unsynchronized / Disabled).
-- Startup no longer writes the MTVU default to a key the core never reads.
-- Several JIT build fixes, and leftover diagnostic code is gated out of normal builds.
+- **God of War II screen-shake flashes fixed.** The EE FPU recompiler stored the ACC register number in the same field as the destination register, so `MADD.S`/`MSUB.S` read and wrote the wrong register whenever ACC was still cached from an earlier `ADDA.S`/`MULA.S`.
+- The fastmem slow path now saves and restores full 128-bit vector registers. Before, it dropped the upper half of cached VU0 and 128-bit GPR values.
+- `SQRT.S` now really rounds to nearest, as PCSX2 intends.
+- A Metal convert pipeline (`RGB5A1_TO_8I`) is now built with the right attachment format.
 
-**In development (`otti83-features` branch)**
+**Frontend** (features ported from the otti83 build)
 
-- Frontend features ported from the otti83 build:
-  - game list with folders, covers, custom titles and play time
-  - per-game Tweaks
-  - cheats and patches, including `.pnach` import and widescreen / no-interlacing switches
-  - save-state slots
-  - speed control (fast-forward, slow motion, frame advance)
-  - volume control
+- Game list with folders, covers, custom titles and play time.
+- Per-game Tweaks that follow the global setting until you override them.
+- Patches & Cheats per game: the built-in patches from `patches.zip`, your own `.pnach` files in `Documents/patches`, and cheat codes from `Documents/cheats`, each listed separately.
+- Save-state slots, speed control (fast-forward, slow motion, frame advance) and volume control.
 - A CPU engine picker (JIT / Interpreter) that writes the settings this core actually reads. Fastmem is on by default.
-- Work on an EE FPU JIT register-allocation bug that causes blue-screen flashes during screen shake in God of War II.
+- Virtual sticks respond to where your thumb is, so touching the rim moves straight away and circular motions register every direction.
+- The landscape pad-layout editor matches the in-game layout exactly.
 
-These changes move to `main` and into a release once they are verified on a device.
+**Performance options**
+
+- **Emulator → Experimental:** MTVU (multi-threaded VU1), off by default.
+- **Emulator → Speedhacks:** EE Cycle Skip (0–3), with the EE Cycle Rate description corrected.
+- **Graphics → Performance:** Skip Duplicate Frames and Hardware Download Mode.
+
+**Known issues**
+
+- Save states do not work yet.
 
 ## Installing
 
-Releases will be published on the [Releases](../../releases) page as unsigned `.ipa` files. Until then, build one yourself (see below).
+Download the unsigned `.ipa` from the [Releases](../../releases) page, or build one yourself (see below).
 
 1. Sign and install the `.ipa` with your tool of choice (Sideloadly, AltStore, SideStore, plumesign, …).
 2. Open iPSX2 once so its Documents folder is created, then add your BIOS and games through the Files app or the in-app importer.
