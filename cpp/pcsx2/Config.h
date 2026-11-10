@@ -1458,22 +1458,47 @@ namespace EmuFolders
 
 // [TEMP_DIAG] Enabling more recompile categories with NORENAME fix applied
 // Removal condition: all categories confirmed working
+#ifndef IPSX2_NO_SHIFT_RECOMPILE
 #define SHIFT_RECOMPILE
+#endif
+#ifndef IPSX2_NO_BRANCH_RECOMPILE
 #define BRANCH_RECOMPILE
+#endif
+#ifndef IPSX2_NO_ARITHMETICIMM_RECOMPILE
 #define ARITHMETICIMM_RECOMPILE
+#endif
+#ifndef IPSX2_NO_ARITHMETIC_RECOMPILE
 #define ARITHMETIC_RECOMPILE
+#endif
+#ifndef IPSX2_NO_MULTDIV_RECOMPILE
 #define MULTDIV_RECOMPILE
+#endif
+#ifndef IPSX2_NO_JUMP_RECOMPILE
 #define JUMP_RECOMPILE
+#endif
+#ifndef IPSX2_NO_LOADSTORE_RECOMPILE
 #define LOADSTORE_RECOMPILE
+#endif
+#ifndef IPSX2_NO_MOVE_RECOMPILE
 #define MOVE_RECOMPILE
+#endif
 //#define MMI_RECOMPILE   // x86 code not ported to ARM64
 //#define MMI0_RECOMPILE
 //#define MMI1_RECOMPILE
 //#define MMI2_RECOMPILE
 //#define MMI3_RECOMPILE
+#ifndef IPSX2_NO_FPU_RECOMPILE
 #define FPU_RECOMPILE
+#endif
+#ifndef IPSX2_NO_CP0_RECOMPILE
 #define CP0_RECOMPILE
+#endif
+#ifndef IPSX2_NO_CP2_RECOMPILE
 #define CP2_RECOMPILE
+#endif
+
+// [iPSX2] Each *_RECOMPILE switch above can be turned off with -DIPSX2_NO_<GROUP>_RECOMPILE to run
+// that instruction group through the interpreter, for bisecting a recompiler bug.
 
 // You can't recompile ARITHMETICIMM without ARITHMETIC.
 #ifndef ARITHMETIC_RECOMPILE

@@ -46,9 +46,4 @@ final class EmulatorBridge: @unchecked Sendable {
     func setRightStick(x: Float, y: Float) {
         iPSX2Bridge.setRightStickX(x, y: y)
     }
-
-    var isOsdVisible: Bool {
-        get { iPSX2Bridge.isPerformanceOverlayVisible() }
-        set { iPSX2Bridge.setPerformanceOverlayVisible(newValue) }
-    }
 }

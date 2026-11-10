@@ -27,6 +27,11 @@ set(USE_VULKAN OFF CACHE BOOL "Enable Vulkan GS renderer" FORCE)
 set(SDL_VULKAN        OFF CACHE BOOL "SDL: Vulkan support"          FORCE)
 set(SDL_RENDER_VULKAN OFF CACHE BOOL "SDL: Vulkan render backend"   FORCE)
 
+# [iPSX2] Third-party libraries build without warnings: they are vendored as-is and their
+# warnings only bury the ones in our own code. The previous options are restored below.
+get_directory_property(_ipsx2_saved_compile_options COMPILE_OPTIONS)
+add_compile_options(-w)
+
 # ── Core utility libraries (always needed) ─────────────────────────────
 add_subdirectory(3rdparty/fast_float EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/fmt        EXCLUDE_FROM_ALL)
@@ -131,6 +136,8 @@ endif()
 if(USE_DISCORD_SDK)
   add_subdirectory(3rdparty/discord-rpc EXCLUDE_FROM_ALL)
 endif()
+
+set_directory_properties(PROPERTIES COMPILE_OPTIONS "${_ipsx2_saved_compile_options}")
 
 # ── Global compile flags ───────────────────────────────────────────────
 # Prevent fmt from being built with exceptions.

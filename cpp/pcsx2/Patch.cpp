@@ -26,6 +26,7 @@
 #include <cstring>
 #include <memory>
 #include <span>
+#include <mutex>
 #include <sstream>
 #include <vector>
 
@@ -174,6 +175,9 @@ namespace Patch
 	const char* PATCH_DISABLE_CONFIG_KEY = "Disable";
 
 	static zip_t* s_patches_zip;
+	// [iPSX2] The UI lists built-in patches from its own thread while the CPU thread may be
+	// (re)loading them; libzip handles are not thread-safe, so every use of the zip is serialised.
+	static std::mutex s_patches_zip_mutex;
 	static PatchList s_gamedb_patches;
 	static PatchList s_game_patches;
 	static PatchList s_cheat_patches;
@@ -438,7 +442,11 @@ void Patch::EnumeratePnachFiles(const std::string_view serial, u32 crc, bool che
 	}
 
 	// Otherwise fall back to the zip.
-	if (cheats || unlabeled_patch_found || !OpenPatchesZip())
+	if (cheats || unlabeled_patch_found)
+		return;
+
+	std::lock_guard<std::mutex> zip_lock(s_patches_zip_mutex);
+	if (!OpenPatchesZip())
 		return;
 
 	// Prefer filename with serial.
@@ -574,7 +582,12 @@ Patch::PatchInfoList Patch::GetPatchInfo(const std::string_view serial, u32 crc,
 
 	EnumeratePnachFiles(serial, crc, cheats, showAllCRCS,
 		[&ret, num_unlabelled_patches](const std::string& filename, const std::string& pnach_data) {
+			const size_t before = ret.size();
 			ExtractPatchInfo(&ret, pnach_data, num_unlabelled_patches);
+			// Files on disk come with a full path; entries read from the zip are bare names.
+			const bool from_zip = filename.find_first_of("/\\") == std::string::npos;
+			for (size_t i = before; i < ret.size(); i++)
+				ret[i].from_zip = from_zip;
 		});
 
 	return ret;

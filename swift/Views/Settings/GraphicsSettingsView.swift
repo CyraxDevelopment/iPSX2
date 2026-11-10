@@ -1,5 +1,9 @@
 // GraphicsSettingsView.swift — Renderer, upscale, filter, and display settings
 // SPDX-License-Identifier: GPL-3.0+
+//
+// Explanatory text is in section footers rather than in rows of its own. A grey caption sitting
+// inside a Form section is drawn as a list row, so it reads as something tappable; a footer is
+// what iOS uses for exactly this and is what the sibling app does throughout.
 
 import SwiftUI
 
@@ -8,45 +12,62 @@ struct GraphicsSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Renderer") {
+            Section {
                 Picker("Renderer", selection: $settings.renderer) {
                     Text("Metal (Hardware)").tag(17)
                     Text("Software").tag(13)
                     Text("Null (No Output)").tag(11)
                 }
-                Text("Metal is recommended. Software is slow but accurate. Null disables rendering (for testing). Requires restart.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Renderer")
+            } footer: {
+                Text("Metal is recommended. Software is slow but accurate. Null disables rendering, for testing. Takes effect on the next boot.")
             }
 
-            Section("Upscaling") {
+            Section {
                 Picker("Internal Resolution", selection: $settings.upscaleMultiplier) {
-                    Text("1x Native (512x448)").tag(Float(1.0))
-                    Text("2x (1024x896)").tag(Float(2.0))
-                    Text("3x (1536x1344)").tag(Float(3.0))
-                    Text("4x (2048x1792)").tag(Float(4.0))
-                    Text("5x (2560x2240)").tag(Float(5.0))
-                    Text("6x (3072x2688)").tag(Float(6.0))
-                    Text("8x (4096x3584)").tag(Float(8.0))
+                    Text("1x Native (512×448)").tag(Float(1.0))
+                    Text("2x (1024×896)").tag(Float(2.0))
+                    Text("3x (1536×1344)").tag(Float(3.0))
+                    Text("4x (2048×1792)").tag(Float(4.0))
+                    Text("5x (2560×2240)").tag(Float(5.0))
+                    Text("6x (3072×2688)").tag(Float(6.0))
+                    Text("8x (4096×3584)").tag(Float(8.0))
                 }
-                Text("Higher values improve visual quality but reduce performance significantly. 4x+ recommended for A17 Pro / M-series. Requires restart.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Upscaling")
+            } footer: {
+                Text("Higher is sharper and costs a lot more GPU time. 4x and above suit A17 Pro and M-series devices. Takes effect on the next boot.")
             }
 
-            Section("Filtering") {
+            Section {
                 Picker("Texture Filtering", selection: $settings.textureFiltering) {
                     Text("Nearest (Pixelated)").tag(0)
                     Text("Bilinear (Forced)").tag(1)
                     Text("Bilinear (PS2 Default)").tag(2)
                     Text("Bilinear (Forced excl. Sprite)").tag(3)
                 }
+                Picker("Trilinear Filtering", selection: $settings.triFilter) {
+                    Text("Automatic").tag(-1)
+                    Text("Off").tag(0)
+                    Text("PS2 (accurate)").tag(1)
+                    Text("Forced").tag(2)
+                }
+                Picker("Anisotropic Filtering", selection: $settings.maxAnisotropy) {
+                    Text("Off").tag(0)
+                    Text("2x").tag(2)
+                    Text("4x").tag(4)
+                    Text("8x").tag(8)
+                    Text("16x").tag(16)
+                }
+            } header: {
+                Text("Filtering")
+            } footer: {
+                Text("Anisotropic filtering sharpens textures seen at an angle. It costs GPU time — lower it first if the frame rate suffers.")
+            }
 
+            Section {
                 Toggle("FXAA", isOn: $settings.fxaa)
-                Text("Fast anti-aliasing. Smooths edges but may blur textures slightly.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
                 Toggle("CAS Sharpening", isOn: Binding(
                     get: { settings.casMode > 0 },
                     set: { settings.casMode = $0 ? 1 : 0 }
@@ -63,12 +84,27 @@ struct GraphicsSettingsView: View {
                             .frame(width: 40)
                     }
                 }
-                Text("Contrast Adaptive Sharpening via Metal. Sharpens the image after rendering.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Sharpening")
+            } footer: {
+                Text("FXAA smooths edges and may blur textures slightly. CAS sharpens the finished image.")
             }
 
-            Section("Display") {
+            Section {
+                Toggle("Shade Boost", isOn: $settings.shadeBoost)
+                if settings.shadeBoost {
+                    shadeSlider("Brightness", value: $settings.shadeBoostBrightness)
+                    shadeSlider("Contrast", value: $settings.shadeBoostContrast)
+                    shadeSlider("Saturation", value: $settings.shadeBoostSaturation)
+                    shadeSlider("Gamma", value: $settings.shadeBoostGamma)
+                }
+            } header: {
+                Text("Colour")
+            } footer: {
+                Text("Post-processing colour adjustment. 50 is neutral for every slider.")
+            }
+
+            Section {
                 Picker("Deinterlace", selection: $settings.interlaceMode) {
                     Text("None").tag(0)
                     Text("Weave (TFF)").tag(1)
@@ -79,16 +115,19 @@ struct GraphicsSettingsView: View {
                     Text("Blend (BFF)").tag(6)
                     Text("Adaptive (Default)").tag(7)
                 }
-
                 Picker("Aspect Ratio", selection: $settings.aspectRatio) {
                     Text("Auto 4:3 / 3:2 (Default)").tag(0)
                     Text("4:3").tag(1)
                     Text("16:9 (Widescreen)").tag(2)
                     Text("Stretch to Window").tag(3)
                 }
+            } header: {
+                Text("Display")
+            } footer: {
+                Text("Adaptive deinterlacing suits nearly every game. 16:9 only reshapes the picture — for a game to actually render widescreen it needs a widescreen patch, under Patches & Cheats.")
             }
 
-            Section("Quality") {
+            Section {
                 Picker("Blending Accuracy", selection: $settings.blendingAccuracy) {
                     Text("Minimum (Fast)").tag(0)
                     Text("Basic (Default)").tag(1)
@@ -97,53 +136,64 @@ struct GraphicsSettingsView: View {
                     Text("Full (Slow)").tag(4)
                     Text("Ultra (Very Slow)").tag(5)
                 }
-                Text("Higher accuracy fixes transparency issues but reduces performance.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
                 Picker("Dithering", selection: $settings.dithering) {
                     Text("Off").tag(0)
                     Text("Unscaled").tag(1)
                     Text("Scaled (Default)").tag(2)
                 }
+            } header: {
+                Text("Quality")
+            } footer: {
+                Text("Higher blending accuracy fixes transparency and shadow artefacts at a real cost in performance.")
             }
 
-            Section("VSync") {
+            Section {
                 Stepper("Queue Size: \(settings.vsyncQueueSize)", value: $settings.vsyncQueueSize, in: 2...16)
-                Text("Higher values reduce frame drops but increase latency.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("VSync")
+            } footer: {
+                Text("How many frames may be queued ahead. Higher reduces dropped frames and adds input latency.")
             }
 
             Section {
                 Toggle("Skip Duplicate Frames", isOn: $settings.skipDuplicateFrames)
-                Text("Does not present frames identical to the previous one. Saves GPU work in 30 FPS games. May cause uneven frame pacing in some titles.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
                 Picker("Hardware Download Mode", selection: $settings.hwDownloadMode) {
                     Text("Accurate (Default)").tag(0)
                     Text("No Readbacks").tag(1)
                     Text("Unsynchronized").tag(2)
                     Text("Disabled").tag(3)
                 }
-                Text("Controls GPU→CPU readbacks, a common cause of slowdowns on mobile GPUs. No Readbacks / Unsynchronized are faster but can break effects that read the framebuffer back (e.g. some post-processing, menus, or save previews). Use Accurate if something looks wrong.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } header: {
                 Text("Performance")
             } footer: {
-                Text("Changes take effect on next VM boot.")
+                Text("Skip Duplicate Frames saves GPU work in 30 FPS games. Hardware Download Mode controls GPU→CPU readbacks, a common slowdown on mobile GPUs: No Readbacks / Unsynchronized are faster but can break effects that read the framebuffer back — use Accurate if something looks wrong. Takes effect on the next boot.")
             }
 
             Section {
-                Button("Reset Graphics to Defaults") {
+                Button(role: .destructive) {
                     settings.resetGraphicsDefaults()
+                } label: {
+                    Text("Reset Graphics to Defaults")
                 }
-                .foregroundStyle(.red)
+            } footer: {
+                Text("Only the settings on this screen. Per-game overrides in the Tweaks tab are untouched.")
             }
         }
         .navigationTitle("Graphics")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func shadeSlider(_ title: String, value: Binding<Int>) -> some View {
+        HStack {
+            Text(title).frame(width: 92, alignment: .leading)
+            Slider(
+                value: Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0) }),
+                in: 0...100, step: 1
+            )
+            Text("\(value.wrappedValue)")
+                .monospacedDigit()
+                .frame(width: 34, alignment: .trailing)
+                .foregroundStyle(.secondary)
+        }
     }
 }

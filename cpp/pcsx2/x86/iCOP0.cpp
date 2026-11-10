@@ -419,8 +419,8 @@ void recMTC0()
 
 			default:
 //				xMOV(ptr32[&cpuRegs.CP0.r[_Rd_]], g_cpuConstRegs[_Rt_].UL[0]);
-                armStore(PTR_CPU(cpuRegs.CP0.r[_Rd_]), g_cpuConstRegs[_Rt_].UL[0]);
-                if (_Rd_ == 14) armEmitCall(reinterpret_cast<void*>(probe_mtc0_epc)); // [iter92]
+				armStore(PTR_CPU(cpuRegs.CP0.r[_Rd_]), g_cpuConstRegs[_Rt_].UL[0]);
+				if (_Rd_ == 14) armEmitCall(reinterpret_cast<void*>(probe_mtc0_epc)); // [iter92]
 				break;
 		}
 	}

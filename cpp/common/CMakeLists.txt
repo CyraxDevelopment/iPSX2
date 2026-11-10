@@ -153,6 +153,14 @@ elseif(APPLE)
 		Darwin/DarwinMisc.cpp
 		Darwin/DarwinMisc.h
 	)
+	# PNG/JPEG decoding via ImageIO (libpng/libjpeg are not linked on Apple targets) and an
+	# NSURLSession HTTP backend (libcurl is excluded), both needed for cover art (ported from
+	# the otti83 iPSX2 frontend).
+	target_sources(common PRIVATE ImageApple.mm HTTPDownloaderNSURL.mm HTTPDownloaderNSURL.h)
+	target_link_libraries(common PRIVATE
+		"-framework CoreGraphics"
+		"-framework ImageIO"
+	)
 	if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
 		target_sources(common PRIVATE
 			CocoaTools.mm

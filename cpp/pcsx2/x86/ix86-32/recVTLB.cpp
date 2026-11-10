@@ -2082,7 +2082,9 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
             if(stack_xmm[i])
             {
 //				xMOVAPS(ptr128[rsp + stack_offset], xRegisterSSE(i));
-                armAsm->Str(a64::DRegister(i), a64::MemOperand(a64::sp, stack_offset));
+                // [iPSX2] Save the whole 128-bit register. Saving only the D (low 64-bit) half
+                // zeroed the upper half of cached VU0 VF / 128-bit GPR values on every slow-path access.
+                armAsm->Str(a64::QRegister(i), a64::MemOperand(a64::sp, stack_offset));
                 stack_offset += XMM_SIZE;
             }
         }
@@ -2211,7 +2213,7 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
             if(stack_xmm[i])
 			{
 //				xMOVAPS(xRegisterSSE(i), ptr128[rsp + stack_offset]);
-                armAsm->Ldr(a64::DRegister(i), a64::MemOperand(a64::sp, stack_offset));
+                armAsm->Ldr(a64::QRegister(i), a64::MemOperand(a64::sp, stack_offset));
 				stack_offset += XMM_SIZE;
 			}
 		}

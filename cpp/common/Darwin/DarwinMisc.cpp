@@ -1541,7 +1541,7 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
             SafeRead32(reg_x27 + 0x1D0, &ee_sp);   // GPR.r[29] ($sp) lower 32b
             SafeRead32(reg_x27 + 0x2A8, &ee_pc_v); // cpuRegs.pc
             char buf[192];
-            int nn = snprintf(buf, sizeof(buf),
+            snprintf(buf, sizeof(buf),
                 "@@SIGBUS_EE_REGS@@ n=%u fa=%08lx ra=%08x v1=%08x sp=%08x eepc=%08x\n",
                 s_ser_n, (unsigned long)fault_val, ee_ra, ee_v1, ee_sp, ee_pc_v);
             SafeWriteStr(buf);
@@ -1549,7 +1549,7 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
             u32 arm64_op = 0;
             SafeRead32(pc_val, &arm64_op);  // ARM64 opcode at faulting instruction
             char buf2[256];
-            int nn2 = snprintf(buf2, sizeof(buf2),
+            snprintf(buf2, sizeof(buf2),
                 "@@SIGBUS_ARM64@@ op=%08x x25=%016lx x0=%08lx x1=%08lx x2=%08lx x3=%08lx x4=%08lx x5=%08lx\n",
                 arm64_op, (unsigned long)reg_x25,
                 (unsigned long)reg_x0, (unsigned long)reg_x1,

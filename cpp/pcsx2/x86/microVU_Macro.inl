@@ -1046,11 +1046,14 @@ void recSQC2()
 	EE::Profiler.EmitOp(eeOpcode::SQC2);
 }
 
-#else
-//namespace Interp = R5900::Interpreter::OpcodeImpl;
+#elif defined(LOADSTORE_RECOMPILE)
+// CP2 recompilation off but LOADSTORE on: nothing else defines recLQC2/recSQC2, so fall back
+// to the interpreter here (this block was commented out, which broke linking without CP2).
+// With LOADSTORE off, iR5900LoadStore.cpp already provides these fallbacks.
+namespace Interp = R5900::Interpreter::OpcodeImpl;
 
-//REC_FUNC(LQC2);
-//REC_FUNC(SQC2);
+REC_FUNC(LQC2);
+REC_FUNC(SQC2);
 
 #endif
 

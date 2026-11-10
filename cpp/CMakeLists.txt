@@ -24,11 +24,11 @@ endif()
 set(CMAKE_OSX_ARCHITECTURES "arm64")
 
 # Version (single source of truth)
-set(IPSX2_VERSION_MAJOR 0)
-set(IPSX2_VERSION_MINOR 1)
-set(IPSX2_VERSION_PATCH 2)
+set(IPSX2_VERSION_MAJOR 1)
+set(IPSX2_VERSION_MINOR 0)
+set(IPSX2_VERSION_PATCH 0)
 set(IPSX2_VERSION "${IPSX2_VERSION_MAJOR}.${IPSX2_VERSION_MINOR}.${IPSX2_VERSION_PATCH}")
-set(IPSX2_BUILD_NUMBER 2)
+set(IPSX2_BUILD_NUMBER 3)
 
 # Project Name
 project(iPSX2 VERSION ${IPSX2_VERSION} LANGUAGES C CXX)
@@ -101,6 +101,16 @@ endif()
 get_git_version_info()
 write_svnrev_h()
 
+# [iPSX2] Warning classes that PCSX2 relies on by design and that would otherwise make up
+# ~1000 lines of every build log: 64->32 bit narrowing in emulated 32-bit address math,
+# memset/memcpy on POD-like structs with constructors, and offsetof on the JIT's register
+# pack (non-standard-layout but fixed). Everything else stays visible.
+add_compile_options(
+	-Wno-shorten-64-to-32
+	-Wno-nontrivial-memcall
+	"$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-Wno-invalid-offsetof>"
+)
+
 # make common
 add_subdirectory(common)
 
@@ -160,9 +170,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(SWIFT_SOURCES
         ${CMAKE_SOURCE_DIR}/../swift/Views/RootView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/GameListView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/CoverDownloadView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/BIOSListView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/HelpView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/GameScreenView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/SaveStateView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/MetalGameView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/EmulatorView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/VirtualControllerView.swift
@@ -170,11 +182,19 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/SettingsRootView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/EmulatorSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GraphicsSettingsView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/AudioSettingsView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/PatchSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/OverlaySettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GamepadSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/VirtualPadSettingsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/PadLayoutEditView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Settings/GameFoldersView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/TweaksListView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/GameTweaksView.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Views/Tweaks/GameCheatsView.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/PadLayoutStore.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Models/ScanFolderStore.swift
+        ${CMAKE_SOURCE_DIR}/../swift/Models/GameTweaksStore.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/EmulatorBridge.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/SwiftUIHost.swift
         ${CMAKE_SOURCE_DIR}/../swift/Models/AppState.swift
@@ -185,16 +205,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # Generate Info.plist with version from CMake
     configure_file("${CMAKE_SOURCE_DIR}/Info.plist.in" "${CMAKE_BINARY_DIR}/Info.plist" @ONLY)
 
-    add_executable(iPSX2 ios_main.mm iPSX2Bridge.mm ${SWIFT_SOURCES})
+    add_executable(iPSX2 ios_main.mm iPSX2Bridge.mm HostCpuQueue.cpp HostSettings.cpp HostGameList.mm HostSaveState.mm ${SWIFT_SOURCES})
     set_target_properties(iPSX2 PROPERTIES
         MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "com.otti83.iPSX2"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.ipsx2.iPSX2"
         MACOSX_BUNDLE_BUNDLE_NAME "iPSX2"
         MACOSX_BUNDLE_BUNDLE_VERSION "${IPSX2_BUILD_NUMBER}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${IPSX2_VERSION}"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
         MACOSX_BUNDLE_EXECUTABLE_NAME "iPSX2"
-        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.otti83.iPSX2"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "io.github.ipsx2.iPSX2"
         XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2" # 1=iPhone, 2=iPad
         XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "18.0"
         XCODE_ATTRIBUTE_SDKROOT "${CMAKE_OSX_SYSROOT}"

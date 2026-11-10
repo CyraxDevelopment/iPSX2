@@ -21,8 +21,12 @@
 
 // iPSX2: Enable recompiler modules when Real Rec is requested
 #if defined(iPSX2_REAL_REC) && iPSX2_REAL_REC
+    #ifndef IPSX2_NO_SHIFT_RECOMPILE
     #define SHIFT_RECOMPILE
+    #endif
+    #ifndef IPSX2_NO_MULTDIV_RECOMPILE
     #define MULTDIV_RECOMPILE
+    #endif
 #endif
 
 extern u32 maxrecmem;
@@ -177,13 +181,179 @@ void eeRecompileCodeRC1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 // rd = rt op sa
 void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int xmminfo);
 
+// [iPSX2 FPU bisect] -DIPSX2_FPU_INTERP_<OP>=1 runs that one FPU op through the interpreter
+// (same fallback as building without FPU_RECOMPILE); 0 = normal JIT.
+#ifndef IPSX2_FPU_INTERP_ABS_S
+#define IPSX2_FPU_INTERP_ABS_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_ADD_S
+#define IPSX2_FPU_INTERP_ADD_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_ADDA_S
+#define IPSX2_FPU_INTERP_ADDA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_EQ
+#define IPSX2_FPU_INTERP_C_EQ 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_LE
+#define IPSX2_FPU_INTERP_C_LE 0
+#endif
+#ifndef IPSX2_FPU_INTERP_C_LT
+#define IPSX2_FPU_INTERP_C_LT 0
+#endif
+#ifndef IPSX2_FPU_INTERP_DIV_S
+#define IPSX2_FPU_INTERP_DIV_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MADD_S
+#define IPSX2_FPU_INTERP_MADD_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MADDA_S
+#define IPSX2_FPU_INTERP_MADDA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MAX_S
+#define IPSX2_FPU_INTERP_MAX_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MIN_S
+#define IPSX2_FPU_INTERP_MIN_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MOV_S
+#define IPSX2_FPU_INTERP_MOV_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MSUB_S
+#define IPSX2_FPU_INTERP_MSUB_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MSUBA_S
+#define IPSX2_FPU_INTERP_MSUBA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MUL_S
+#define IPSX2_FPU_INTERP_MUL_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_MULA_S
+#define IPSX2_FPU_INTERP_MULA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_NEG_S
+#define IPSX2_FPU_INTERP_NEG_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SUB_S
+#define IPSX2_FPU_INTERP_SUB_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SUBA_S
+#define IPSX2_FPU_INTERP_SUBA_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_SQRT_S
+#define IPSX2_FPU_INTERP_SQRT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_RSQRT_S
+#define IPSX2_FPU_INTERP_RSQRT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_CVT_S
+#define IPSX2_FPU_INTERP_CVT_S 0
+#endif
+#ifndef IPSX2_FPU_INTERP_CVT_W
+#define IPSX2_FPU_INTERP_CVT_W 0
+#endif
+// [iPSX2 FPU verify] -DIPSX2_FPU_VERIFY=1: every FPU op is JIT-compiled as normal, then re-run by the
+// interpreter on a snapshot of the pre-op FPU state. Mismatches go to Documents/fpu_verify.txt.
+// The JIT result is what the game keeps, so gameplay is unchanged apart from speed.
+// -DIPSX2_FPU_FLUSH_AROUND=1: only the register flushes of the verify build, no checking.
+// -DIPSX2_FPU_FLUSHOP_<OP>=1: those flushes for one op only (bisecting the register-allocation bug).
+#ifndef IPSX2_FPU_FLUSH_AROUND
+#define IPSX2_FPU_FLUSH_AROUND 0
+#endif
+#ifndef IPSX2_FPU_VERIFY
+#define IPSX2_FPU_VERIFY 0
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ABS_S
+#define IPSX2_FPU_FLUSHOP_ABS_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ADD_S
+#define IPSX2_FPU_FLUSHOP_ADD_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_ADDA_S
+#define IPSX2_FPU_FLUSHOP_ADDA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_EQ
+#define IPSX2_FPU_FLUSHOP_C_EQ (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_LE
+#define IPSX2_FPU_FLUSHOP_C_LE (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_C_LT
+#define IPSX2_FPU_FLUSHOP_C_LT (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_DIV_S
+#define IPSX2_FPU_FLUSHOP_DIV_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MADD_S
+#define IPSX2_FPU_FLUSHOP_MADD_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MADDA_S
+#define IPSX2_FPU_FLUSHOP_MADDA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MAX_S
+#define IPSX2_FPU_FLUSHOP_MAX_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MIN_S
+#define IPSX2_FPU_FLUSHOP_MIN_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MOV_S
+#define IPSX2_FPU_FLUSHOP_MOV_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MSUB_S
+#define IPSX2_FPU_FLUSHOP_MSUB_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MSUBA_S
+#define IPSX2_FPU_FLUSHOP_MSUBA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MUL_S
+#define IPSX2_FPU_FLUSHOP_MUL_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_MULA_S
+#define IPSX2_FPU_FLUSHOP_MULA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_NEG_S
+#define IPSX2_FPU_FLUSHOP_NEG_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SUB_S
+#define IPSX2_FPU_FLUSHOP_SUB_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SUBA_S
+#define IPSX2_FPU_FLUSHOP_SUBA_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_SQRT_S
+#define IPSX2_FPU_FLUSHOP_SQRT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_RSQRT_S
+#define IPSX2_FPU_FLUSHOP_RSQRT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_CVT_S
+#define IPSX2_FPU_FLUSHOP_CVT_S (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+#ifndef IPSX2_FPU_FLUSHOP_CVT_W
+#define IPSX2_FPU_FLUSHOP_CVT_W (IPSX2_FPU_VERIFY || IPSX2_FPU_FLUSH_AROUND)
+#endif
+void iPSX2_FpuVerifyBefore();
+void iPSX2_FpuVerifyAfter(void (*interp)(), const char* name);
+void iPSX2_FpuVerifyEmitBefore();
+void iPSX2_FpuVerifyEmitAfter(void (*interp)(), const char* name);
+
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
 	void rec##fn(void) \
 	{ \
+		if (IPSX2_FPU_INTERP_##fn) \
+		{ \
+			iFlushCall(FLUSH_INTERPRETER); \
+			armEmitCall(reinterpret_cast<void*>((uptr)R5900::Interpreter::OpcodeImpl::COP1::fn)); \
+			return; \
+		} \
+		if (IPSX2_FPU_FLUSHOP_##fn) \
+			iPSX2_FpuVerifyEmitBefore(); \
 		if (CHECK_FPU_FULL) \
 			eeFPURecompileCode(DOUBLE::rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
 		else \
 			eeFPURecompileCode(rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
+		if (IPSX2_FPU_FLUSHOP_##fn) \
+			iPSX2_FpuVerifyEmitAfter(R5900::Interpreter::OpcodeImpl::COP1::fn, #fn); \
 	}
 
 // rd = rs op rt (all regs need to be in xmm)

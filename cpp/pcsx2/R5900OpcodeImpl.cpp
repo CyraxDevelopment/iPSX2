@@ -1114,7 +1114,7 @@ void SYSCALL()
 			}
 			if (!is_reg4_poll && s_2nd_n++ < 500) {
 				Console.WriteLn("@@2ND_BOOT_SYSCALL@@ n=%u pc=%08x call=%02x(%s) a0=%08x a1=%08x v0=%08x ra=%08x cycle=%u intc_mask=%04x",
-					s_2nd_n, cpuRegs.pc, (u32)call, (call < 256 ? R5900::bios[call] : "?"),
+					s_2nd_n, cpuRegs.pc, (u32)call, R5900::bios[call],
 					cpuRegs.GPR.n.a0.UL[0], cpuRegs.GPR.n.a1.UL[0],
 					cpuRegs.GPR.n.v0.UL[0], cpuRegs.GPR.n.ra.UL[0],
 					cpuRegs.cycle, psHu32(INTC_MASK) & 0xFFFF);
@@ -1131,7 +1131,7 @@ void SYSCALL()
 				const char* mode = (Cpu != &intCpu) ? "JIT" : "Interp";
 				Console.WriteLn("@@SYSCALL_WARMREBOOT@@ [%s] n=%u pc=%08x call=%02x(%s) a0=%08x a1=%08x v0=%08x v1=%08x ra=%08x sp=%08x cycle=%u",
 					mode, s_wr_sc_n, cpuRegs.pc,
-					(u32)call, (call < 256 ? R5900::bios[call] : "?"),
+					(u32)call, R5900::bios[call],
 					cpuRegs.GPR.n.a0.UL[0], cpuRegs.GPR.n.a1.UL[0],
 					cpuRegs.GPR.n.v0.UL[0], cpuRegs.GPR.n.v1.UL[0],
 					cpuRegs.GPR.n.ra.UL[0], cpuRegs.GPR.n.sp.UL[0],
@@ -1207,7 +1207,7 @@ void SYSCALL()
 	// [TEMP_DIAG] Exit/ExecPS2 全callキャプチャ — Removal condition: ゲーム終了causeafter identified
 	if (call == 0x04 || call == 0x07 || call == 0x7b || call == 0x24) {
 		Console.WriteLn("@@GAME_EXIT_TRACE@@ pc=%08x call=%02x(%s) a0=%08x a1=%08x ra=%08x cycle=%u",
-			cpuRegs.pc, (u32)call, (call < 256 ? R5900::bios[call] : "?"),
+			cpuRegs.pc, (u32)call, R5900::bios[call],
 			cpuRegs.GPR.n.a0.UL[0], cpuRegs.GPR.n.a1.UL[0],
 			cpuRegs.GPR.n.ra.UL[0], cpuRegs.cycle);
 	}
@@ -1275,7 +1275,7 @@ void SYSCALL()
 		if (s_sc_n < 500) {
 			Console.WriteLn("@@EE_SYSCALL_TRACE@@ n=%u pc=%08x call=%02x(%s) a0=%08x a1=%08x a2=%08x v0=%08x ra=%08x",
 				s_sc_n, cpuRegs.pc,
-				(u32)call, (call < 256 ? R5900::bios[call] : "?"),
+				(u32)call, R5900::bios[call],
 				cpuRegs.GPR.n.a0.UL[0], cpuRegs.GPR.n.a1.UL[0], cpuRegs.GPR.n.a2.UL[0],
 				cpuRegs.GPR.n.v0.UL[0], cpuRegs.GPR.n.ra.UL[0]);
 			// [iter657] @@SYSCALL_REGDUMP@@ first 5 SYSCALLs: full register state for JIT vs Interp comparison
@@ -1737,7 +1737,7 @@ void SYSCALL()
 			if (s_glate_n < 100) {
 				Console.WriteLn("@@GAME_SYSCALL_LATE@@ n=%d call=%02x(%s) a0=%08x a1=%08x pc=%08x ra=%08x cycle=%u",
 					s_glate_n,
-					(u32)call, (call < 256 ? R5900::bios[call] : "?"),
+					(u32)call, R5900::bios[call],
 					cpuRegs.GPR.n.a0.UL[0], cpuRegs.GPR.n.a1.UL[0],
 					cpuRegs.pc, cpuRegs.GPR.n.ra.UL[0], cpuRegs.cycle);
 				// [P15] sceSifSetDma 記述子ダンプ — VSync RPC の内容を特定

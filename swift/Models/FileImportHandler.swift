@@ -12,7 +12,9 @@ final class FileImportHandler: @unchecked Sendable {
     var showImportAlert = false
 
     private static let biosExtensions: Set<String> = ["bin", "rom"]
-    private static let gameExtensions: Set<String> = ["iso", "chd", "img"]
+    // Matches what the game scanner accepts, minus .bin which is decided by size below.
+    private static let gameExtensions: Set<String> = ["iso", "chd", "img", "mdf", "cso", "zso", "gz", "elf"]
+    private static let cheatExtensions: Set<String> = ["pnach"]
     // .bin files > 50MB are treated as game images, not BIOS
     private static let biosSizeThreshold: UInt64 = 50 * 1024 * 1024
 
@@ -34,6 +36,9 @@ final class FileImportHandler: @unchecked Sendable {
         if Self.gameExtensions.contains(ext) {
             destDir = (docsPath as NSString).appendingPathComponent("iso")
             category = "Game"
+        } else if Self.cheatExtensions.contains(ext) {
+            destDir = (docsPath as NSString).appendingPathComponent("cheats")
+            category = "Cheat file"
         } else if Self.biosExtensions.contains(ext) {
             // Check file size to distinguish BIOS (.bin ~4MB) from game (.bin ~700MB)
             let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
