@@ -53,6 +53,17 @@ jobs:
       # ──────────────────────────────────────────────────────────────────────────
       # 3. Install build tools
       # ──────────────────────────────────────────────────────────────────────────
+      - name: Ensure Metal toolchain
+        # Since Xcode 26 the Metal compiler is a separate download, and not every runner image
+        # has it (macos-15-intel does not). The shaders cannot be built without it.
+        run: |
+          if xcrun -sdk iphoneos metal --version >/dev/null 2>&1; then
+            xcrun -sdk iphoneos metal --version | head -1
+          else
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk iphoneos metal --version | head -1
+          fi
+
       - name: Install build tools
         # The runner images already ship cmake and xcbeautify. Only install what is missing:
         # updating Homebrew and upgrading cmake costs minutes, and on the Intel image (no
