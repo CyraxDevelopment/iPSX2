@@ -81,7 +81,10 @@ static inline a64::WRegister HostW(int slot) { return a64::WRegister(HostGprPhys
 #define EEREC_S    (((info) >>  8) & 0x1f)
 #define EEREC_T    (((info) >> 13) & 0x1f)
 #define EEREC_D    (((info) >> 18) & 0x1f)
-#define EEREC_LO   (((info) >> 18) & 0x1f)
+// [iPSX2] LO gets its own field (bits 28-31) instead of sharing bit 18 with D: the MMI ops that
+// write both rd and LO (PMULTW, PMADDW, PMFLO, ...) would otherwise OR the two register numbers
+// together, exactly like the ACC/D clash. Four bits are enough for an XMM index or an iOS GPR slot.
+#define EEREC_LO   ((static_cast<u32>(info) >> 28) & 0xf)
 #define EEREC_HI   (((info) >> 23) & 0x1f)
 // [iPSX2] ACC shares its field with HI (bit 23), never with D. With ACC at bit 18 an op that has
 // both a D and an ACC register (MADD.S / MSUB.S) OR'ed the two register numbers together and
@@ -91,7 +94,7 @@ static inline a64::WRegister HostW(int slot) { return a64::WRegister(HostGprPhys
 #define PROCESS_EE_SET_S(reg)   (((reg) <<  8) | PROCESS_EE_S)
 #define PROCESS_EE_SET_T(reg)   (((reg) << 13) | PROCESS_EE_T)
 #define PROCESS_EE_SET_D(reg)   (((reg) << 18) | PROCESS_EE_D)
-#define PROCESS_EE_SET_LO(reg)  (((reg) << 18) | PROCESS_EE_LO)
+#define PROCESS_EE_SET_LO(reg)  (static_cast<int>(static_cast<u32>(reg) << 28) | PROCESS_EE_LO)
 #define PROCESS_EE_SET_HI(reg)  (((reg) << 23) | PROCESS_EE_HI)
 #define PROCESS_EE_SET_ACC(reg) (((reg) << 23) | PROCESS_EE_ACC)
 

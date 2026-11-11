@@ -252,14 +252,44 @@ void mVUmergeRegs(const xmm& dest, const xmm& src, int xyzw, bool modXYZW)
 //------------------------------------------------------------------
 
 // Backup Volatile Regs (EAX, ECX, EDX, MM0~7, XMM0~7, are all volatile according to 32bit Win/Linux ABI)
+// [iPSX2] The four status-flag instances live in gprF0-F3 for the whole VU program. On x86-64
+// those are callee-saved registers (rbx, r12-r14), so C calls made from inside a block never
+// touched them. On arm64 they are w3/w12/w13/w14, all caller-saved, so they have to be saved
+// around every such call or the flags come back as garbage.
+__fi void mVUsaveFlagRegs(microVU& mVU)
+{
+    armAsm->Str(gprF0, PTR_MVU(microVU[mVU.index].statFlag[0]));
+    armAsm->Str(gprF1, PTR_MVU(microVU[mVU.index].statFlag[1]));
+    armAsm->Str(gprF2, PTR_MVU(microVU[mVU.index].statFlag[2]));
+    armAsm->Str(gprF3, PTR_MVU(microVU[mVU.index].statFlag[3]));
+}
+
+__fi void mVUloadFlagRegs(microVU& mVU)
+{
+    armAsm->Ldr(gprF0, PTR_MVU(microVU[mVU.index].statFlag[0]));
+    armAsm->Ldr(gprF1, PTR_MVU(microVU[mVU.index].statFlag[1]));
+    armAsm->Ldr(gprF2, PTR_MVU(microVU[mVU.index].statFlag[2]));
+    armAsm->Ldr(gprF3, PTR_MVU(microVU[mVU.index].statFlag[3]));
+}
+
+// x16/x17 are the assembler's scratch registers and x18 is reserved on iOS.
+static __fi bool mVUisSavedGPR(int i)
+{
+    return armIsCallerSaved(i) && i != 16 && i != 17 && i != 18;
+}
+
 __fi void mVUbackupRegs(microVU& mVU, bool toMemory = false, bool onlyNeeded = false)
 {
+    mVUsaveFlagRegs(mVU);
+
     if (toMemory)
     {
-        int i, e = iREGCNT_GPR;
+        // [iPSX2] The VU allocator hands out x0-x24 (iREGCNT_MVU_GPR), not the EE's five slots;
+        // looping to iREGCNT_GPR saved x0-x3 only and left cached VI registers unprotected.
+        int i, e = iREGCNT_MVU_GPR;
         for (i = 0; i < e; ++i)
         {
-            if (!armIsCallerSaved(i) || i == 4)
+            if (!mVUisSavedGPR(i))
                 continue;
 
             if (!onlyNeeded || mVU.regAlloc->checkCachedGPR(i)) {
@@ -276,7 +306,9 @@ __fi void mVUbackupRegs(microVU& mVU, bool toMemory = false, bool onlyNeeded = f
                 continue;
 
             if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || static_cast<int>(xmmPQ.GetCode()) == i) {
-                armAsm->Push(a64::xzr, a64::DRegister(i));
+                // [iPSX2] The whole 128-bit register. Saving the D half zeroed z/w of cached VF
+                // registers and the P half of xmmPQ on every XGKICK.
+                armAsm->Str(a64::QRegister(i), a64::MemOperand(a64::sp, -16, a64::PreIndex));
             }
         }
     }
@@ -301,16 +333,16 @@ __fi void mVUrestoreRegs(microVU& mVU, bool fromMemory = false, bool onlyNeeded 
                 continue;
 
             if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || static_cast<int>(xmmPQ.GetCode()) == i) {
-                armAsm->Pop(a64::DRegister(i), a64::xzr);
+                armAsm->Ldr(a64::QRegister(i), a64::MemOperand(a64::sp, 16, a64::PostIndex));
             }
         }
 
         ////
 
-        e = iREGCNT_GPR - 1;
+        e = iREGCNT_MVU_GPR - 1;
         for (i = e; i >= 0; --i)
         {
-            if (!armIsCallerSaved(i)  || i == 4)
+            if (!mVUisSavedGPR(i))
                 continue;
 
             if (!onlyNeeded || mVU.regAlloc->checkCachedGPR(i)) {
@@ -323,6 +355,8 @@ __fi void mVUrestoreRegs(microVU& mVU, bool fromMemory = false, bool onlyNeeded 
 //		xMOVAPS(xmmPQ, ptr128[&mVU.xmmBackup[xmmPQ.GetCode()][0]]);
         armAsm->Ldr(xmmPQ.Q(), PTR_MVU(microVU[mVU.index].xmmBackup[xmmPQ.GetCode()][0]));
     }
+
+    mVUloadFlagRegs(mVU);
 }
 
 #if 0
@@ -403,9 +437,12 @@ __fi void mVUaddrFix(mV, const a64::Register& gprReg)
             armAsm->And(reg32, reg32, 0x3f);
 
 //			xADD(gprReg, (u128*)VU1.VF - (u128*)VU0.Mem);
-            a64::MemOperand mop1 = PTR_CPU(vuRegs[1].VF);
-            a64::MemOperand mop2 = PTR_CPU(vuRegs[0].Mem);
-            armAsm->Sub(REX, mop1.GetBaseRegister(), mop2.GetBaseRegister());
+            // [iPSX2] The distance, in 16-byte units, from VU0's memory to VU1's VF registers.
+            // This used to subtract the two operands' base registers, which are both the CPU
+            // state pointer, so it added 0 and VU0 read its own memory instead of VU1's registers.
+            const s64 vu1_regs_delta =
+                (static_cast<s64>(reinterpret_cast<uptr>(&VU1.VF[0])) - static_cast<s64>(reinterpret_cast<uptr>(VU0.Mem))) / 16;
+            armAsm->Mov(REX, vu1_regs_delta);
             armAsm->Add(gprReg, gprReg, REX);
 
 //		jmpB.SetTarget();

@@ -1160,7 +1160,9 @@ void recSQRT_S_xmm(int info)
 		roundmode_nearest = EmuConfig.Cpu.FPUFPCR;
 		roundmode_nearest.SetRoundMode(FPRoundMode::Nearest);
 //		xLDMXCSR(ptr32[&roundmode_nearest.bitmask]);
-        armAsm->Msr(a64::FPCR, armLoad64(PTR_CPU(Cpu.FPUFPCR.bitmask)));
+        // [iPSX2] was reloading Cpu.FPUFPCR, so the switch to nearest never happened.
+        armAsm->Mov(RAX, static_cast<u64>(roundmode_nearest.bitmask));
+        armAsm->Msr(a64::FPCR, RAX);
 		roundmodeFlag = 1;
 	}
 
@@ -1338,7 +1340,9 @@ void recRSQRT_S_xmm(int info)
 		roundmode_nearest = EmuConfig.Cpu.FPUFPCR;
 		roundmode_nearest.SetRoundMode(FPRoundMode::Nearest);
 //		xLDMXCSR(ptr32[&roundmode_nearest.bitmask]);
-        armAsm->Msr(a64::FPCR, armLoad64(PTR_CPU(Cpu.FPUFPCR.bitmask)));
+        // [iPSX2] was reloading Cpu.FPUFPCR, so the switch to nearest never happened.
+        armAsm->Mov(RAX, static_cast<u64>(roundmode_nearest.bitmask));
+        armAsm->Msr(a64::FPCR, RAX);
 		roundmodeFlag = true;
 	}
 
