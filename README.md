@@ -25,6 +25,13 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - The fastmem slow path now saves and restores full 128-bit vector registers. Before, it dropped the upper half of cached VU0 and 128-bit GPR values.
 - `SQRT.S` now really rounds to nearest, as PCSX2 intends.
 - A Metal convert pipeline (`RGB5A1_TO_8I`) is now built with the right attachment format.
+- The IOP `printf` emulation no longer writes one byte past its format buffer.
+
+**Settings that now actually apply**
+
+- **Aspect Ratio** — the core reads it by name, but the app saved a number, which the core rejected and replaced with 16:9. It now takes effect, globally and per game.
+- **Deinterlace** — every choice used to run the mode next to it ("Adaptive" was really Blend BFF). The picker now lists the core's ten modes in the right order and defaults to Automatic. If you picked a mode before, check it once.
+- The Shade Boost **Gamma** slider is gone: this core has no gamma control, so it never did anything.
 
 **Frontend** (features ported from the otti83 build)
 
@@ -60,7 +67,7 @@ Download the unsigned `.ipa` from the [Releases](../../releases) page, or build 
 CMake generates an Xcode project; compilation is done by Xcode. The easiest route is GitHub Actions:
 
 1. Fork this repository (or push to your own copy).
-2. Open the **Actions** tab, choose **Build Unsigned IPA** and click **Run workflow**.
+2. Open the **Actions** tab, choose **Build Unsigned IPA** and click **Run workflow**. Keep the runner on `macos-latest`; if the job sits in the queue and is cancelled ("not acquired by Runner"), GitHub's Apple Silicon runners are out of capacity, so run it again with `macos-15-intel`.
 3. When it finishes, download the `iPSX2-unsigned-<run>` artifact and extract the `.ipa`.
 
 To build locally on a Mac:
