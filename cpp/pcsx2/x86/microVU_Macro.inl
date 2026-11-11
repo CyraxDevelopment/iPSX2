@@ -125,7 +125,7 @@ void mVUFreeCOP2GPR(int hostreg)
 bool mVUIsReservedCOP2(int hostreg)
 {
 	// gprF1 through 3 is not correctly used in COP2 mode.
-	return (hostreg == gprT1.GetCode() || hostreg == gprT2.GetCode() || hostreg == gprF0.GetCode());
+	return (hostreg == static_cast<int>(gprT1.GetCode()) || hostreg == static_cast<int>(gprT2.GetCode()) || hostreg == static_cast<int>(gprF0.GetCode()));
 }
 
 #define REC_COP2_mVU0(f, opName, mode) \
@@ -871,7 +871,7 @@ static void recQMTC2()
 
 		// NOTE: can't transfer xmm15 to VF, it's reserved for PQ.
 		int vfreg = _checkXMMreg(XMMTYPE_VFREG, _Rd_, MODE_WRITE);
-		if (can_rename && rtreg >= 0 && rtreg != xmmPQ.GetCode())
+		if (can_rename && rtreg >= 0 && rtreg != static_cast<int>(xmmPQ.GetCode()))
 		{
 			// rt is no longer needed, so transfer to VF.
 			if (vfreg >= 0)

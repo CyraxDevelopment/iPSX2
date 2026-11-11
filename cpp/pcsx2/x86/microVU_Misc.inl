@@ -275,7 +275,7 @@ __fi void mVUbackupRegs(microVU& mVU, bool toMemory = false, bool onlyNeeded = f
             if (!armIsCallerSavedXmm(i))
                 continue;
 
-            if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || xmmPQ.GetCode() == i) {
+            if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || static_cast<int>(xmmPQ.GetCode()) == i) {
                 armAsm->Push(a64::xzr, a64::DRegister(i));
             }
         }
@@ -300,7 +300,7 @@ __fi void mVUrestoreRegs(microVU& mVU, bool fromMemory = false, bool onlyNeeded 
             if (!armIsCallerSavedXmm(i))
                 continue;
 
-            if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || xmmPQ.GetCode() == i) {
+            if (!onlyNeeded || mVU.regAlloc->checkCachedReg(i) || static_cast<int>(xmmPQ.GetCode()) == i) {
                 armAsm->Pop(a64::DRegister(i), a64::xzr);
             }
         }

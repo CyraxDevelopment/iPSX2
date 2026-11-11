@@ -613,7 +613,7 @@ public:
 
 	bool checkVFClamp(int regId)
 	{
-		if (regId != xmmPQ.GetCode() && ((xmmMap[regId].VFreg == 33 && !EmuConfig.Gamefixes.IbitHack) || xmmMap[regId].isZero))
+		if (regId != static_cast<int>(xmmPQ.GetCode()) && ((xmmMap[regId].VFreg == 33 && !EmuConfig.Gamefixes.IbitHack) || xmmMap[regId].isZero))
 			return false;
 		else
 			return true;

@@ -233,8 +233,11 @@ struct CoverDownloadView: View {
         running = true
         iPSX2Bridge.downloadCovers(withTemplate: urlTemplate, useSerial: useSerial)
         // The core reports progress through a counter rather than a callback, so poll it.
+        // A timer scheduled from the main thread fires on the main run loop.
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            progress = Int(iPSX2Bridge.coverDownloadProgress())
+            MainActor.assumeIsolated {
+                progress = Int(iPSX2Bridge.coverDownloadProgress())
+            }
         }
     }
 

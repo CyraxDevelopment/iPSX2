@@ -843,7 +843,6 @@ static void recSLTs_(int info, int sign)
 	// [iter682] FIX: _allocX86reg for Rs can evict EEREC_T's slot, making the
 	// PROCESS_EE_T flag stale. Save Rt's physical register BEFORE the allocation.
 	// If EEREC_T is evicted, fall back to reading Rt from cpuRegs memory.
-	const int pre_alloc_t_slot = (info & PROCESS_EE_T) ? EEREC_T : -1;
 	const int pre_alloc_t_phys = (info & PROCESS_EE_T) ? HostGprPhys(EEREC_T) : -1;
 
 	// force Rs into a register, may as well cache it since we're loading anyway.

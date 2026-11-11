@@ -197,7 +197,7 @@ static void mVUGenerateWaitMTVU(mV)
 
         // T1 often contains the address we're loading when waiting for VU1.
         // T2 isn't used until afterwards, so don't bother saving it.
-        if (i == gprT2.GetCode())
+        if (i == static_cast<int>(gprT2.GetCode()))
             continue;
 
         armAsm->Push(a64::xzr, a64::XRegister(i));
@@ -231,7 +231,7 @@ static void mVUGenerateWaitMTVU(mV)
         if (!armIsCallerSaved(i) || i == 4)
             continue;
 
-        if (i == gprT2.GetCode())
+        if (i == static_cast<int>(gprT2.GetCode()))
             continue;
 
         armAsm->Pop(a64::XRegister(i), a64::xzr);

@@ -12,7 +12,7 @@ static id<MTLLibrary> loadMainLibrary(id<MTLDevice> dev, NSString* name)
 {
     NSString* path = [[NSBundle mainBundle] pathForResource:name ofType:@"metallib"];
     NSError *error = nil;
-    id<MTLLibrary> lib = path ? [dev newLibraryWithFile:path error:&error] : nil;
+    id<MTLLibrary> lib = path ? [dev newLibraryWithURL:[NSURL fileURLWithPath:path] error:&error] : nil;
     if (lib) {
         Console.WriteLn("Debug: Metal Library '%s' loaded successfully.", [name UTF8String]);
     } else {
@@ -209,7 +209,8 @@ GSMTLDevice::GSMTLDevice(MRCOwned<id<MTLDevice>> dev)
 #if TARGET_OS_SIMULATOR
 	features.framebuffer_fetch = false;
 #else
-	features.framebuffer_fetch = [dev supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v1];
+	// Apple1 = the old iOS_GPUFamily1_v1 feature set: every Apple GPU, all of which can read the render target.
+	features.framebuffer_fetch = [dev supportsFamily:MTLGPUFamilyApple1];
 #endif
 #if !TARGET_OS_IPHONE
 	if ([dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1])

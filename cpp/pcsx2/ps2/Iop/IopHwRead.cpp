@@ -110,7 +110,6 @@ mem8_t iopHwRead8_Page3( u32 addr )
     static u32 debug_last_iop_pc = 0;
     static u32 debug_stall_pc = 0xFFFFFFFF;
     static u32 debug_stall_count = 0;
-    static int debug_stall_logged = 0;
 
     // 1. bfc02454 Hit Counter & Exit Logic
     if (cpuRegs.pc == 0xbfc02454) {

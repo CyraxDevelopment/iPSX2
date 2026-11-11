@@ -450,7 +450,7 @@ void GSgifTransfer(const u8* mem, u32 size)
 {
 	static int tr_log = 0;
     if (tr_log == 0) fprintf(stderr, "@@GS_PROOF@@ first_gif_transfer=1 size=%d\n", size);
-	g_gs_xfer_count[3]++; // GSgifTransfer (PATH3 variant)
+	g_gs_xfer_count[3] = g_gs_xfer_count[3] + 1; // GSgifTransfer (PATH3 variant)
 	// [TEMP_DIAG] Dump GIF data at GSgifTransfer level for JIT/Interp comparison
 	// Removal condition: BIOS browserafter confirmed
 	u32 xn = g_gs_xfer_count[3];
@@ -465,7 +465,6 @@ void GSgifTransfer(const u8* mem, u32 size)
 		for (u32 i = 0; i < nloop && (i+1) < (u32)size; i++) {
 			u32 off = (i + 1) * 4; // skip GIF tag
 			u8 reg_addr = d[off + 2] & 0xFF;
-			u64 reg_data = (u64)d[off] | ((u64)d[off+1] << 32);
 			// Only log interesting registers: PRIM(0), RGBAQ(1), ST(2), XYZ2(5), TEX0(6/7), ALPHA(42), FRAME(4c/4d)
 			if (reg_addr <= 0x07 || reg_addr == 0x42 || reg_addr == 0x47 || reg_addr == 0x4c) {
 				Console.WriteLn("@@GIF_REG@@ xn=%u i=%u reg=0x%02x data=%08x_%08x",
@@ -482,7 +481,7 @@ void GSgifTransfer1(u8* mem, u32 addr)
 	static int tr1_log = 0;
 	if (tr1_log < 10) Console.WriteLn("Debug: GSgifTransfer1 called (addr: %d)", addr);
 	tr1_log++;
-	g_gs_xfer_count[0]++; // PATH1
+	g_gs_xfer_count[0] = g_gs_xfer_count[0] + 1; // PATH1
 	g_gs_renderer->Transfer<0>(const_cast<u8*>(mem) + addr, (0x4000 - addr) / 16);
 }
 
@@ -491,7 +490,7 @@ void GSgifTransfer2(u8* mem, u32 size)
 	static int tr2_log = 0;
 	if (tr2_log < 10) Console.WriteLn("Debug: GSgifTransfer2 called (size: %d)", size);
 	tr2_log++;
-	g_gs_xfer_count[1]++; // PATH2
+	g_gs_xfer_count[1] = g_gs_xfer_count[1] + 1; // PATH2
 	g_gs_renderer->Transfer<1>(const_cast<u8*>(mem), size);
 }
 
@@ -500,7 +499,7 @@ void GSgifTransfer3(u8* mem, u32 size)
 	static int tr_log = 0;
 	if (tr_log < 10) Console.WriteLn("Debug: GSgifTransfer3 called (size: %d)", size);
 	tr_log++;
-	g_gs_xfer_count[2]++; // PATH3
+	g_gs_xfer_count[2] = g_gs_xfer_count[2] + 1; // PATH3
 	g_gs_renderer->Transfer<2>(const_cast<u8*>(mem), size);
 }
 
@@ -512,9 +511,6 @@ void GSvsync(u32 field, bool registers_written)
     // [TEMP_DIAG] report per-vsync draw count from GS thread
     extern std::atomic<uint32_t> g_sw_draw_count;
     extern volatile uint32_t g_gif_fifo_write_count;
-    static u32 gs_last_draw = 0;
-    static u32 gs_last_xfer = 0;
-    static u32 gs_last_fifo = 0;
     if (gs_vsync_n <= 120 || (gs_vsync_n % 60) == 0) {
         u32 cur_draw = g_sw_draw_count.load(std::memory_order_relaxed);
         u32 cur_xfer = g_gs_xfer_count[3];
@@ -537,9 +533,6 @@ void GSvsync(u32 field, bool registers_written)
             getVif1XferCalls(), getVif1CmdsTotal(),
             getVif1CmdNop(), getVif1CmdUnpack(),
             getVif1CmdMscal(), getVif1CmdDirect(), getVif1CmdOther());
-        gs_last_draw = cur_draw;
-        gs_last_xfer = cur_xfer;
-        gs_last_fifo = cur_fifo;
     }
     if (first_vsync) {
         fprintf(stderr, "@@GS_PROOF@@ first_vsync=1\n");
@@ -1110,7 +1103,7 @@ void* GSAllocateWrappedMemory(size_t size, size_t repeat)
 {
 	pxAssert(s_shm_fd == -1);
 
-	const char* file_name = "/GS.mem";
+	[[maybe_unused]] const char* file_name = "/GS.mem"; // used by the non-iOS paths below
 #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
 	// iOS sandbox blocks shm_open and /tmp — use app sandbox temp dir
 	const char* tmpdir = getenv("TMPDIR");

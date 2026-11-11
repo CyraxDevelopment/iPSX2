@@ -127,7 +127,7 @@ volatile uint32_t g_gif_fifo_write_count = 0;
 
 void WriteFIFO_GIF(const mem128_t* value)
 {
-	g_gif_fifo_write_count++;
+	g_gif_fifo_write_count = g_gif_fifo_write_count + 1;
 	// [TEMP_DIAG] @@GIF_FIFO_DATA@@ — dump first 140 FIFO writes for JIT/Interp comparison
 	// Removal condition: BIOS browserafter confirmed
 	{
