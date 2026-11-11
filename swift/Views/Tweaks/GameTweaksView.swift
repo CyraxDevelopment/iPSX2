@@ -163,6 +163,14 @@ struct GameTweaksView: View {
                 }
             }
 
+        case .named(let values, let labels):
+            let current = iPSX2Bridge.gameSettingsString(s.section, key: s.key, defaultValue: "")
+            return zip(values, labels).map { value, label in
+                Option(label: label, isCurrent: current == value) {
+                    iPSX2Bridge.setGameSettingsString(s.section, key: s.key, value: value)
+                }
+            }
+
         case .decimal(let range, let step):
             let current = iPSX2Bridge.gameSettingsFloat(s.section, key: s.key, defaultValue: 1.0)
             return stride(from: range.lowerBound, through: range.upperBound, by: step).map { value in
@@ -183,6 +191,8 @@ struct GameTweaksView: View {
             return iPSX2Bridge.gameSettingsBool(s.section, key: s.key, defaultValue: false) ? "On" : "Off"
         case .integer, .choice:
             return "\(iPSX2Bridge.gameSettingsInt(s.section, key: s.key, defaultValue: 0))"
+        case .named:
+            return iPSX2Bridge.gameSettingsString(s.section, key: s.key, defaultValue: "")
         case .decimal:
             return Self.format(iPSX2Bridge.gameSettingsFloat(s.section, key: s.key, defaultValue: 0))
         }
@@ -200,6 +210,9 @@ struct GameTweaksView: View {
         case .choice(let values, let labels):
             let value = Int(iPSX2Bridge.getINIInt(s.section, key: s.key, defaultValue: 0))
             return zip(values, labels).first { $0.0 == value }?.1 ?? "\(value)"
+        case .named(let values, let labels):
+            let value = iPSX2Bridge.getINIString(s.section, key: s.key, defaultValue: values.first ?? "")
+            return zip(values, labels).first { $0.0 == value }?.1 ?? value
         case .decimal:
             return Self.format(iPSX2Bridge.getINIFloat(s.section, key: s.key, defaultValue: 1.0))
         }

@@ -96,7 +96,6 @@ struct GraphicsSettingsView: View {
                     shadeSlider("Brightness", value: $settings.shadeBoostBrightness)
                     shadeSlider("Contrast", value: $settings.shadeBoostContrast)
                     shadeSlider("Saturation", value: $settings.shadeBoostSaturation)
-                    shadeSlider("Gamma", value: $settings.shadeBoostGamma)
                 }
             } header: {
                 Text("Colour")
@@ -105,15 +104,19 @@ struct GraphicsSettingsView: View {
             }
 
             Section {
+                // Tags are GSInterlaceMode values. They used to start at "None" = 0, one off from
+                // the enum (0 is Automatic, 1 is Off), so every choice ran the mode below it.
                 Picker("Deinterlace", selection: $settings.interlaceMode) {
-                    Text("None").tag(0)
-                    Text("Weave (TFF)").tag(1)
-                    Text("Weave (BFF)").tag(2)
-                    Text("Bob (TFF)").tag(3)
-                    Text("Bob (BFF)").tag(4)
-                    Text("Blend (TFF)").tag(5)
-                    Text("Blend (BFF)").tag(6)
-                    Text("Adaptive (Default)").tag(7)
+                    Text("Automatic (Default)").tag(0)
+                    Text("Off").tag(1)
+                    Text("Weave (TFF)").tag(2)
+                    Text("Weave (BFF)").tag(3)
+                    Text("Bob (TFF)").tag(4)
+                    Text("Bob (BFF)").tag(5)
+                    Text("Blend (TFF)").tag(6)
+                    Text("Blend (BFF)").tag(7)
+                    Text("Adaptive (TFF)").tag(8)
+                    Text("Adaptive (BFF)").tag(9)
                 }
                 Picker("Aspect Ratio", selection: $settings.aspectRatio) {
                     Text("Auto 4:3 / 3:2 (Default)").tag(0)
@@ -124,7 +127,7 @@ struct GraphicsSettingsView: View {
             } header: {
                 Text("Display")
             } footer: {
-                Text("Adaptive deinterlacing suits nearly every game. 16:9 only reshapes the picture — for a game to actually render widescreen it needs a widescreen patch, under Patches & Cheats.")
+                Text("Automatic deinterlacing suits nearly every game. 16:9 only reshapes the picture — for a game to actually render widescreen it needs a widescreen patch, under Patches & Cheats.")
             }
 
             Section {

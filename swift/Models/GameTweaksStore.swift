@@ -21,6 +21,8 @@ enum TweakKind {
     case integer(range: ClosedRange<Int>)
     /// Fixed set of values, shown by name.
     case choice(values: [Int], labels: [String])
+    /// Fixed set of values the core stores by name rather than number (e.g. AspectRatio).
+    case named(values: [String], labels: [String])
     case decimal(range: ClosedRange<Float>, step: Float)
 }
 
@@ -84,10 +86,10 @@ enum GameTweaks {
                              kind: .decimal(range: 1.0...3.0, step: 1.0)),
                 TweakSetting(section: "EmuCore/GS", key: "AspectRatio", title: "Aspect Ratio",
                              help: nil,
-                             kind: .choice(values: [0, 1, 2], labels: ["Auto 4:3 / 3:2", "4:3", "16:9"])),
+                             kind: .named(values: SettingsStore.aspectRatioNames, labels: SettingsStore.aspectRatioLabels)),
                 TweakSetting(section: "EmuCore/GS", key: "deinterlace_mode", title: "Deinterlacing",
                              help: nil,
-                             kind: .choice(values: [0, 1, 7], labels: ["Off", "Weave", "Adaptive"])),
+                             kind: .choice(values: [0, 1, 2, 6, 8], labels: ["Automatic", "Off", "Weave (TFF)", "Blend (TFF)", "Adaptive (TFF)"])),
                 TweakSetting(section: "EmuCore/GS", key: "accurate_blending_unit", title: "Blending Accuracy",
                              help: "Higher fixes transparency and shadow artefacts at a cost.",
                              kind: .choice(values: [0, 1, 2, 3], labels: ["Minimum", "Basic", "Medium", "High"])),

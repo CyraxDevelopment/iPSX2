@@ -215,8 +215,24 @@ final class SettingsStore: @unchecked Sendable {
     var interlaceMode: Int {
         didSet { iPSX2Bridge.setINIInt("EmuCore/GS", key: "deinterlace_mode", value: Int32(interlaceMode)) }
     }
+    /// The core reads AspectRatio by name ("Auto 4:3/3:2", "4:3", …), not by number. Writing the
+    /// picker index made LoadSettings reject the value and fall back to its default, so the
+    /// setting never took effect. Order matches the Graphics picker.
+    static let aspectRatioNames = ["Auto 4:3/3:2", "4:3", "16:9", "Stretch"]
+    static let aspectRatioLabels = ["Auto 4:3 / 3:2", "4:3", "16:9 (Widescreen)", "Stretch to Window"]
+
+    /// Picker index for a stored value; also accepts the bare numbers older builds wrote.
+    static func aspectRatioIndex(_ stored: String) -> Int {
+        if let i = aspectRatioNames.firstIndex(of: stored) { return i }
+        if let n = Int(stored), aspectRatioNames.indices.contains(n) { return n }
+        return 0
+    }
+
     var aspectRatio: Int {
-        didSet { iPSX2Bridge.setINIInt("EmuCore/GS", key: "AspectRatio", value: Int32(aspectRatio)) }
+        didSet {
+            let i = Self.aspectRatioNames.indices.contains(aspectRatio) ? aspectRatio : 0
+            iPSX2Bridge.setINIString("EmuCore/GS", key: "AspectRatio", value: Self.aspectRatioNames[i])
+        }
     }
     var blendingAccuracy: Int {
         didSet { iPSX2Bridge.setINIInt("EmuCore/GS", key: "accurate_blending_unit", value: Int32(blendingAccuracy)) }
@@ -373,8 +389,8 @@ final class SettingsStore: @unchecked Sendable {
         fxaa = iPSX2Bridge.getINIBool("EmuCore/GS", key: "fxaa", defaultValue: false)
         casMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "CASMode", defaultValue: 0))
         casSharpness = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "CASSharpness", defaultValue: 50))
-        interlaceMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "deinterlace_mode", defaultValue: 7))
-        aspectRatio = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "AspectRatio", defaultValue: 0))
+        interlaceMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "deinterlace_mode", defaultValue: 0))
+        aspectRatio = Self.aspectRatioIndex(iPSX2Bridge.getINIString("EmuCore/GS", key: "AspectRatio", defaultValue: Self.aspectRatioNames[0]))
         blendingAccuracy = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "accurate_blending_unit", defaultValue: 1))
         dithering = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "dithering_ps2", defaultValue: 2))
         // OSD
@@ -434,8 +450,8 @@ final class SettingsStore: @unchecked Sendable {
         fxaa = iPSX2Bridge.getINIBool("EmuCore/GS", key: "fxaa", defaultValue: false)
         casMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "CASMode", defaultValue: 0))
         casSharpness = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "CASSharpness", defaultValue: 50))
-        interlaceMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "deinterlace_mode", defaultValue: 7))
-        aspectRatio = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "AspectRatio", defaultValue: 0))
+        interlaceMode = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "deinterlace_mode", defaultValue: 0))
+        aspectRatio = Self.aspectRatioIndex(iPSX2Bridge.getINIString("EmuCore/GS", key: "AspectRatio", defaultValue: Self.aspectRatioNames[0]))
         blendingAccuracy = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "accurate_blending_unit", defaultValue: 1))
         dithering = Int(iPSX2Bridge.getINIInt("EmuCore/GS", key: "dithering_ps2", defaultValue: 2))
         // The stored preset is a label; the position is what decides whether anything is drawn.
@@ -536,7 +552,7 @@ final class SettingsStore: @unchecked Sendable {
         fxaa = false
         casMode = 0             // Disabled
         casSharpness = 50
-        interlaceMode = 7       // Adaptive
+        interlaceMode = 0       // Automatic (GSInterlaceMode::Automatic)
         aspectRatio = 0         // Auto 4:3/3:2
         blendingAccuracy = 1    // Basic
         dithering = 2           // Scaled
