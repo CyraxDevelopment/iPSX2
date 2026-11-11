@@ -1066,7 +1066,8 @@ namespace R3000A
 			char* ptmp = tmp;
 			unsigned int printed_bytes = 0;
 			int remaining_buf = max_len - 1;
-			int n = 1, i = 0, j = 0;
+			int n = 1, i = 0;
+			unsigned int j = 0;
 
 			while (fmt[i])
 			{
@@ -1100,7 +1101,9 @@ namespace R3000A
 							}
 						}
 
-						if (j >= max_len)
+						// [iPSX2] room for the char and the terminator: j == max_len - 1 used to write
+						// the terminator one byte past tmp2.
+						if (j + 1 >= max_len)
 							break;
 						tmp2[j++] = fmt[i];
 						tmp2[j] = 0;
@@ -1589,8 +1592,6 @@ namespace R3000A
 		// [iter671] cap 50→200, sifcmd/sifman/loadfile フィルタadd
 		{
 			static u32 s_irx_n = 0;
-			bool is_critical = (libname == "sifcmd" || libname == "sifman" || libname == "loadfile" ||
-								libname == "sifinitrp" || index == 17);
 			// [iter683] IRX_CALL log removed — was spamming 880K+ lines
 		if (s_irx_n++ < 50) {
 				const char* fn = funcname ? funcname : "unknown";
