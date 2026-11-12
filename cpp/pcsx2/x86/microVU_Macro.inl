@@ -125,7 +125,9 @@ void mVUFreeCOP2GPR(int hostreg)
 bool mVUIsReservedCOP2(int hostreg)
 {
 	// gprF1 through 3 is not correctly used in COP2 mode.
-	return (hostreg == static_cast<int>(gprT1.GetCode()) || hostreg == static_cast<int>(gprT2.GetCode()) || hostreg == static_cast<int>(gprF0.GetCode()));
+	// [iPSX2] hostreg is an EE allocator slot; compare the physical register it stands for.
+	const int phys = HostGprPhys(hostreg);
+	return (phys == static_cast<int>(gprT1.GetCode()) || phys == static_cast<int>(gprT2.GetCode()) || phys == static_cast<int>(gprF0.GetCode()));
 }
 
 #define REC_COP2_mVU0(f, opName, mode) \
