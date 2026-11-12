@@ -37,10 +37,15 @@
 #include "common/ScopedGuard.h"
 #include "common/StringUtil.h"
 #include "common/ZipHelpers.h"
+#if TARGET_OS_IPHONE
+#include "common/Image.h"
+#endif
 
 #include "fmt/format.h"
 
 #include <csetjmp>
+#include <cstdlib>
+#include <cstring>
 #if !TARGET_OS_IPHONE
 #include <png.h>
 #endif
@@ -843,7 +848,45 @@ static bool SaveState_CompressScreenshot(SaveStateScreenshotData* data, zip_t* z
 	zs_free.Cancel();
 	return true;
 #else
-	return false;
+	// [iPSX2] No libpng on iOS: encode with ImageIO through RGBA8Image. This branch used to
+	// return false, and SaveState_AddToZip treats that as failure and discards the whole zip,
+	// so every save state was thrown away. A thumbnail that cannot be made is now skipped
+	// instead: losing the preview must never lose the save.
+	for (u32& px : data->pixels)
+		px |= 0xFF000000u; // opaque, as the libpng path does
+
+	const RGBA8Image image(data->width, data->height, data->pixels.data());
+	std::optional<std::vector<u8>> png = image.SaveToBuffer(EntryFilename_Screenshot);
+	if (!png.has_value() || png->empty())
+	{
+		Console.Warning("SaveState: could not encode the screenshot, saving without a thumbnail.");
+		return true;
+	}
+
+	// libzip takes ownership of a malloc'd buffer when freep is set.
+	void* const buffer = std::malloc(png->size());
+	if (!buffer)
+		return true;
+	std::memcpy(buffer, png->data(), png->size());
+
+	zip_error_t ze = {};
+	zip_source_t* const zs = zip_source_buffer_create(buffer, png->size(), 1, &ze);
+	if (!zs)
+	{
+		std::free(buffer);
+		return true;
+	}
+
+	const s64 file_index = zip_file_add(zf, EntryFilename_Screenshot, zs, ZIP_FL_OVERWRITE);
+	if (file_index < 0)
+	{
+		zip_source_free(zs);
+		return true;
+	}
+
+	// png is already compressed, no point doing it twice
+	zip_set_file_compression(zf, file_index, ZIP_CM_STORE, 0);
+	return true;
 #endif
 }
 
@@ -925,7 +968,29 @@ static bool SaveState_ReadScreenshot(zip_t* zf, u32* out_width, u32* out_height,
 
 	return true;
 #else
-	return false;
+	// [iPSX2] Decode the thumbnail with ImageIO (no libpng on iOS).
+	auto zff = zip_fopen_managed(zf, EntryFilename_Screenshot, 0);
+	if (!zff)
+		return false;
+
+	const std::optional<std::vector<u8>> png = ReadBinaryFileInZip(zff.get());
+	if (!png.has_value() || png->empty())
+		return false;
+
+	RGBA8Image image;
+	if (!image.LoadFromBuffer(EntryFilename_Screenshot, png->data(), png->size()) ||
+		image.GetWidth() == 0 || image.GetHeight() == 0)
+	{
+		return false;
+	}
+
+	*out_width = image.GetWidth();
+	*out_height = image.GetHeight();
+	const u32* const px = image.GetPixels();
+	out_pixels->assign(px, px + static_cast<size_t>(image.GetWidth()) * image.GetHeight());
+	for (u32& p : *out_pixels)
+		p |= 0xFF000000u; // make opaque
+	return true;
 #endif
 }
 

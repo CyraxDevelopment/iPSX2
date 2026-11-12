@@ -53,6 +53,7 @@ void mVUDTendProgram(mV, microFlagCycles* mFC, int isEbit)
 			mVUlow.kickcycles = 99;
 			mVU_XGKICK_SYNC(mVU, true);
 		}
+        mVUsaveFlagRegs(mVU); // [iPSX2] the status flags are stored further down, after this call
         if (!isVU1) {
 //            xFastCall((void *) mVU0clearlpStateJIT);
             armEmitCall(reinterpret_cast<void*>(mVU0clearlpStateJIT));
@@ -61,6 +62,7 @@ void mVUDTendProgram(mV, microFlagCycles* mFC, int isEbit)
 //            xFastCall((void *) mVU1clearlpStateJIT);
             armEmitCall(reinterpret_cast<void*>(mVU1clearlpStateJIT));
         }
+        mVUloadFlagRegs(mVU);
 	}
 
     // Save P/Q Regs
@@ -219,6 +221,7 @@ void mVUendProgram(mV, microFlagCycles* mFC, int isEbit)
 			mVUlow.kickcycles = 99;
 			mVU_XGKICK_SYNC(mVU, true);
 		}
+        mVUsaveFlagRegs(mVU); // [iPSX2] the status flags are stored further down, after this call
         if (!isVU1) {
 //            xFastCall((void *) mVU0clearlpStateJIT);
             armEmitCall(reinterpret_cast<void*>(mVU0clearlpStateJIT));
@@ -227,6 +230,7 @@ void mVUendProgram(mV, microFlagCycles* mFC, int isEbit)
 //            xFastCall((void *) mVU1clearlpStateJIT);
             armEmitCall(reinterpret_cast<void*>(mVU1clearlpStateJIT));
         }
+        mVUloadFlagRegs(mVU);
 	}
 
     // Save P/Q Regs

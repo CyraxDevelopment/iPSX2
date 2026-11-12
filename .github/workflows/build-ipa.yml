@@ -1,11 +1,12 @@
 name: Build Unsigned IPA
+run-name: Build IPA · ${{ inputs.runner || 'macos-latest' }} · ${{ github.ref_name }}
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
     tags: ['v*']          # a version tag builds the IPA and drafts a GitHub Release with it
   pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
     inputs:
       runner:
@@ -85,7 +86,7 @@ jobs:
       # 4. ccache
       # ──────────────────────────────────────────────────────────────────────────
       - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.24
         with:
           key: ${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}
           restore-keys: |
@@ -136,26 +137,6 @@ jobs:
           fi
           echo "✅ CMake configure completed successfully"
 
-
-      # ──────────────────────────────────────────────────────────────────────────
-      # 6. Generate compile_commands.json
-      #    Xcode generator doesn't emit compile_commands.json; extract it from
-      #    the Xcode build log via xcpretty-json-formatter or generate a stub.
-      #    NOTE: Ninja + CMAKE_SYSTEM_NAME=iOS cross-compile requires a full
-      #    toolchain file and fails without one, so we skip Ninja here.
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: Generate compile_commands.json (stub)
-        run: |
-          echo "[]" > "$BUILD_DIR/compile_commands.json"
-          echo "Note: full compile_commands.json requires a Ninja iOS toolchain; stub written."
-
-      - name: Upload compile_commands.json
-        uses: actions/upload-artifact@v5
-        with:
-          name: compile-commands-${{ github.run_number }}
-          path: ${{ env.BUILD_DIR }}/compile_commands.json
-          retention-days: 30
-          if-no-files-found: warn
 
       # ──────────────────────────────────────────────────────────────────────────
       # 7. Discover the generated .xcodeproj path
@@ -262,7 +243,7 @@ jobs:
       # 10. Upload IPA artifact
       # ──────────────────────────────────────────────────────────────────────────
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: iPSX2-unsigned-${{ github.run_number }}
           path: ${{ env.IPA_PATH }}
@@ -305,7 +286,7 @@ jobs:
       # ──────────────────────────────────────────────────────────────────────────
       - name: Upload build logs (on failure)
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: build-logs-${{ github.run_number }}
           path: |

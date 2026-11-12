@@ -72,6 +72,13 @@ if (UNIX AND NOT APPLE)
 	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 endif()
 
+# [iPSX2] Several vendored sources compile to nothing on iOS (Vulkan, D3D, x86 SIMD paths);
+# libtool would otherwise report each empty object while archiving.
+# (CMake's Xcode generator fills OTHER_LIBTOOLFLAGS from CMAKE_STATIC_LINKER_FLAGS, so set it there.)
+set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -no_warning_for_no_symbols")
+# SDL3 and libc++ are pulled in by more than one dependency; the linker only needs them once.
+add_link_options(LINKER:-no_warn_duplicate_libraries)
+
 # include some generic functions to ensure correctness of the env
 include(Pcsx2Utils)
 
@@ -106,6 +113,7 @@ write_svnrev_h()
 # memset/memcpy on POD-like structs with constructors, and offsetof on the JIT's register
 # pack (non-standard-layout but fixed). Everything else stays visible.
 add_compile_options(
+	-Wno-unknown-warning-option # older Xcode (e.g. on macos-15-intel) lacks some of these
 	-Wno-shorten-64-to-32
 	-Wno-nontrivial-memcall
 	"$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-Wno-invalid-offsetof>"

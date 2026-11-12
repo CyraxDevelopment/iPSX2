@@ -189,15 +189,19 @@ static void mVUGenerateWaitMTVU(mV)
 {
     mVU.waitMTVU = armGetCurrentCodePointer();
 
+    // [iPSX2] Save every caller-saved register the VU allocator can hand out (x0-x15, which
+    // includes the status-flag registers) and whole 128-bit vector registers. This used the EE
+    // slot count (x0-x3 only) and the D halves, so VI/flag registers and the z/w lanes of
+    // cached VF registers were lost whenever VU0 had to wait for the VU1 thread.
     int i;
-    for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
+    for (i = 0; i < static_cast<int>(iREGCNT_MVU_GPR); ++i)
     {
-        if (!armIsCallerSaved(i) || i == 4)
+        if (!mVUisSavedGPR(i))
             continue;
 
         // T1 often contains the address we're loading when waiting for VU1.
         // T2 isn't used until afterwards, so don't bother saving it.
-        if (i == gprT2.GetCode())
+        if (i == static_cast<int>(gprT2.GetCode()))
             continue;
 
         armAsm->Push(a64::xzr, a64::XRegister(i));
@@ -208,7 +212,7 @@ static void mVUGenerateWaitMTVU(mV)
         if (!armIsCallerSavedXmm(i))
             continue;
 
-        armAsm->Push(a64::d31, a64::DRegister(i));
+        armAsm->Str(a64::QRegister(i), a64::MemOperand(a64::sp, -16, a64::PreIndex));
     }
 
     ////
@@ -223,21 +227,20 @@ static void mVUGenerateWaitMTVU(mV)
         if (!armIsCallerSavedXmm(i))
             continue;
 
-        armAsm->Pop(a64::DRegister(i), a64::d31);
+        armAsm->Ldr(a64::QRegister(i), a64::MemOperand(a64::sp, 16, a64::PostIndex));
     }
     //
-    for (i = static_cast<int>(iREGCNT_GPR - 1); i >= 0; --i)
+    for (i = static_cast<int>(iREGCNT_MVU_GPR - 1); i >= 0; --i)
     {
-        if (!armIsCallerSaved(i) || i == 4)
+        if (!mVUisSavedGPR(i))
             continue;
 
-        if (i == gprT2.GetCode())
+        if (i == static_cast<int>(gprT2.GetCode()))
             continue;
 
         armAsm->Pop(a64::XRegister(i), a64::xzr);
     }
 
-//	xRET();
     armAsm->Ret();
 
 	Perf::any.Register(mVU.waitMTVU, static_cast<u32>(mVU.prog.x86start - mVU.waitMTVU),

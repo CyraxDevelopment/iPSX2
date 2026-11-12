@@ -211,7 +211,8 @@ bool _hasX86reg(int type, int reg, int required_mode /*= 0*/)
 int _getFreeXMMreg(u32 maxreg)
 {
     int i, tempi;
-	u32 bestcount = 0x10000, e = maxreg;
+	u32 bestcount = 0x10000;
+	const int e = static_cast<int>(maxreg);
 
 	// check for free registers
 	for (i = 0; i < e; ++i)
@@ -735,11 +736,9 @@ void _deleteGPRtoX86reg(int reg, int flush)
                 if (!s_log_del) {
                     s_log_del = true;
                     // Check XMM fallback potential
-                    int hostRegXMM = -1;
                     bool xmmDirty = false;
                     for (int k=0; k<iREGCNT_XMM; ++k) {
                         if (xmmregs[k].inuse && xmmregs[k].type == XMMTYPE_GPRREG && xmmregs[k].reg == reg) {
-                            hostRegXMM = k;
                             xmmDirty = (xmmregs[k].mode & MODE_WRITE);
                             break;
                         }

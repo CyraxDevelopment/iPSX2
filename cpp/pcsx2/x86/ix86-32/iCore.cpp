@@ -81,7 +81,7 @@ int _getFreeX86reg(int mode)
     // Pass 1: Prefer Non-Volatile (Callee-Saved) registers (x19-x28) for stability across C++ calls.
     for (int pass = 0; pass < 2; ++pass)
     {
-        for (i = 0; i < iREGCNT_GPR; ++i)
+        for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
         {
             const int reg = (g_x86checknext + i) % iREGCNT_GPR;
             if (x86regs[reg].inuse || !_isAllocatableX86reg(reg))
@@ -105,7 +105,7 @@ int _getFreeX86reg(int mode)
         }
     }
 
-    for (i = 0; i < iREGCNT_GPR; ++i)
+    for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
     {
         if (!_isAllocatableX86reg(i))
             continue;
@@ -170,7 +170,7 @@ int _getFreeX86reg(int mode)
 		s_count++;
 		_flushX86regs();
 		_freeX86regs();
-		for (i = 0; i < iREGCNT_GPR; ++i)
+		for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
 		{
 			const int reg = (g_x86checknext + i) % iREGCNT_GPR;
 			if (x86regs[reg].inuse || !_isAllocatableX86reg(reg))

@@ -1936,7 +1936,6 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
              if (DarwinMisc::FindJitBlock(pc_val, &gpc, &rxptr)) {
                   SafeWriteStr("@@JIT_BLOCK@@ source=PC");
                   // Minimal hex writer inline
-                  char buf[32]; 
                   // ... laziness, reused write_hex_val if kept context ...
                   // Just trust FindJitBlock works and let's print raw logs if possible or minimal
                   // Assuming FindJitBlock doesn't log itself.

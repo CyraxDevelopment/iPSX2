@@ -209,7 +209,7 @@ void cpuException(u32 code, u32 bd)
     // Removal condition: SYSCALL loop (0x82064/0x82080) root cause確定時
     {
         const bool is_syscall = (code == 0x20);
-        static int s_syscall_n = 0;
+        [[maybe_unused]] static int s_syscall_n = 0; // read by the DEBUG trace below
 #if DEBUG
         static int s_other_exc_n = 0;
         const bool log_it = is_syscall ? (s_syscall_n < 20) : (s_other_exc_n < 20);
@@ -989,7 +989,6 @@ __fi void _cpuEventTest_Shared()
 	{
 		// [TEMP_DIAG] @@IOP_STUCK@@ wall-clock check around IOP execution
 		{
-			static uint64_t s_iop_wall_prev = 0;
 			static int s_iop_stuck_n = 0;
 			struct timeval tv0;
 			gettimeofday(&tv0, nullptr);

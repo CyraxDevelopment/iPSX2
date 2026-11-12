@@ -36,6 +36,22 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - The fastmem slow path now saves and restores full 128-bit vector registers. Before, it dropped the upper half of cached VU0 and 128-bit GPR values.
 - `SQRT.S` now really rounds to nearest, as PCSX2 intends.
 - A Metal convert pipeline (`RGB5A1_TO_8I`) is now built with the right attachment format.
+- The IOP `printf` emulation no longer writes one byte past its format buffer.
+- **microVU:** C calls made from inside a VU block (XGKICK, branch compilation) now preserve the status-flag registers and whole 128-bit vector registers. Before, flags could come back as garbage and the z/w lanes of cached registers and the P register were zeroed on every XGKICK.
+- **microVU COP2 mode:** VI registers shared with the EE recompiler now use the same host register on both sides. The VU side used the EE's slot number as a physical register, so integer VU0 instructions run from EE code could read and write the wrong register.
+- VU0 reading VU1's registers now reaches them instead of its own memory.
+- `SQRT.S`/`RSQRT.S` in full FPU mode round to nearest as well.
+
+**Save states work**
+
+- Saving used to fail every time: the thumbnail could not be encoded on iOS, and that discarded the whole state. Thumbnails are now encoded with ImageIO, and a state is saved even if its thumbnail cannot be made.
+- PNG and JPEG images (save-state thumbnails, game covers) can be decoded and encoded; the ImageIO codecs were built but never registered.
+
+**Settings that now actually apply**
+
+- **Aspect Ratio** — the core reads it by name, but the app saved a number, which the core rejected and replaced with 16:9. It now takes effect, globally and per game.
+- **Deinterlace** — every choice used to run the mode next to it ("Adaptive" was really Blend BFF). The picker now lists the core's ten modes in the right order and defaults to Automatic. If you picked a mode before, check it once.
+- The Shade Boost **Gamma** slider is gone: this core has no gamma control, so it never did anything.
 
 **Frontend** (features ported from the otti83 build)
 
@@ -54,10 +70,6 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - **Emulator → Speedhacks:** EE Cycle Skip (0–3), with the EE Cycle Rate description corrected.
 - **Graphics → Performance:** Skip Duplicate Frames and Hardware Download Mode.
 
-**Known issues**
-
-- Save states do not work yet.
-
 ## Installing
 
 Download the unsigned `.ipa` from the [Releases](../../releases) page, or build one yourself (see below).
@@ -71,7 +83,7 @@ Download the unsigned `.ipa` from the [Releases](../../releases) page, or build 
 CMake generates an Xcode project; compilation is done by Xcode. The easiest route is GitHub Actions:
 
 1. Fork this repository (or push to your own copy).
-2. Open the **Actions** tab, choose **Build Unsigned IPA** and click **Run workflow**.
+2. Open the **Actions** tab, choose **Build Unsigned IPA** and click **Run workflow**. Keep the runner on `macos-latest`; if the job sits in the queue and is cancelled ("not acquired by Runner"), GitHub's Apple Silicon runners are out of capacity, so run it again with `macos-15-intel`.
 3. When it finishes, download the `iPSX2-unsigned-<run>` artifact and extract the `.ipa`.
 
 To build locally on a Mac:

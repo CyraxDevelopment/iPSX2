@@ -754,7 +754,6 @@ static __fi void VSyncStart(u32 sCycle)
 		uint64_t frameUs = (CliffDiag::frameStartUs > 0) ? (nowUs - CliffDiag::frameStartUs) : 0;
 		if (g_FrameCount <= 10000)
 		{
-			s32 raMax = CliffDiag::readAmountMax.load(std::memory_order_relaxed);
 			u32 gsUs = CliffDiag::gsXferUs.load(std::memory_order_relaxed);
 			u32 gsN  = CliffDiag::gsXferCalls.load(std::memory_order_relaxed);
 			u32 ebit = CliffDiag::vu1Ebit.load(std::memory_order_relaxed);
@@ -965,13 +964,13 @@ static __fi void GSVSync()
             if (s_auto_start_frame >= 0)
                 Console.WriteLn("@@CFG@@ iPSX2_AUTO_START_FRAME=%d", s_auto_start_frame);
         }
-        if (s_auto_start_frame >= 0 && gsvsync_count >= (u32)s_auto_start_frame) {
+        if (s_auto_start_frame >= 0 && static_cast<u32>(gsvsync_count) >= static_cast<u32>(s_auto_start_frame)) {
             // Start = bind index 9 (PAD_START in PadDualshock2::Inputs)
             // Press for 4 frames, release for 60, repeat
             const u32 phase = (gsvsync_count - s_auto_start_frame) % 64;
             const float val = (phase < 4) ? 1.0f : 0.0f;
             Pad::SetControllerState(0, 9, val); // Port 0, PAD_START
-            if (phase == 0 && gsvsync_count < (u32)s_auto_start_frame + 256)
+            if (phase == 0 && static_cast<u32>(gsvsync_count) < static_cast<u32>(s_auto_start_frame) + 256)
                 Console.WriteLn("@@AUTO_START@@ frame=%d pressing Start", gsvsync_count);
         }
     }
@@ -1712,7 +1711,7 @@ static __fi void GSVSync()
         extern std::atomic<uint32_t> g_dispfb2_write_count;
         extern std::atomic<uint64_t> g_dispfb2_last_value;
         static u32 s_last_dispfb2_report = 0;
-        if (gsvsync_count >= 50 && gsvsync_count <= 400 && gsvsync_count >= s_last_dispfb2_report + 30) {
+        if (gsvsync_count >= 50 && gsvsync_count <= 400 && static_cast<u32>(gsvsync_count) >= s_last_dispfb2_report + 30) {
             s_last_dispfb2_report = gsvsync_count;
             const u64 dispfb2_mem = *(const u64*)(g_RealGSMem + 0x90);
             Console.WriteLn("@@DISPFB2_MONITOR@@ vsync=%d writes=%u last_api=%016llx mem=%016llx",
@@ -2189,9 +2188,6 @@ static __fi void GSVSync()
     if (gsvsync_count >= 3 && gsvsync_count <= 12) {
         u32 ee_pc = cpuRegs.pc;
         u32 ee_s2 = cpuRegs.GPR.r[18].UL[0]; // s2
-        u32 ee_s0 = cpuRegs.GPR.r[16].UL[0]; // s0
-        u32 ee_a0 = cpuRegs.GPR.r[4].UL[0];  // a0
-        u32 ee_ra = cpuRegs.GPR.r[31].UL[0]; // ra
         u32 cop0_status = cpuRegs.CP0.n.Status.val;
         u32 dmac_ctrl = 0, sif_ctrl = 0;
         if (eeMem) {
@@ -3974,7 +3970,7 @@ static __fi void GSVSync()
             u32 sp = cpuRegs.GPR.r[29].UL[0];
             // Scan EE SPR (0x70000000-0x70003FFF) range above current sp
             // Look for values matching 0x9FC4xxxx pattern (= BIOS return addresses)
-            u32 found_addr = 0, found_val = 0, found_count = 0;
+            u32 found_count = 0;
             for (u32 off = 0; off <= 0x200; off += 4) {
                 u32 addr = sp + off;
                 if (addr > 0x70003FFC) break;
@@ -6064,8 +6060,6 @@ static __fi void GSVSync()
 
 static __fi void VSyncEnd(u32 sCycle)
 {
-	static int vsyncend_count = 0;
-
 	EECNT_LOG("    ================  EE COUNTER VSYNC END (frame: %d)  ================", g_FrameCount);
 
 	g_FrameCount++;

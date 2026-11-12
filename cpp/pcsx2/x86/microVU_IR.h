@@ -232,6 +232,29 @@ protected:
 	std::array<microMapXMM, xmmTotal> xmmMap;
 	std::array<microMapGPR, gprTotal> gprMap;
 
+	// [iPSX2] gprMap index <-> host register.
+	// In micro mode the index is the physical register number. In COP2 (macro) mode the map is
+	// shared with the EE allocator, whose indices are *slots* that live in x19-x24
+	// (HostGprPhys). The code used the slot number as a physical register there, so VI values
+	// the EE had cached in x19+ were read from and written to w0-w4 instead, and x86regs[]
+	// (iREGCNT_GPR entries) was indexed up to gprTotal.
+	bool isCOP2Slot(int idx) const { return regAllocCOP2 && idx >= 0 && idx < static_cast<int>(iREGCNT_GPR); }
+	int gprPhys(int idx) const { return isCOP2Slot(idx) ? HostGprPhys(idx) : idx; }
+	const a64::Register& gprW(int idx) const { return armWRegister(gprPhys(idx)); }
+	int gprIndex(const a64::Register& reg) const
+	{
+		const int code = static_cast<int>(reg.GetCode());
+		if (regAllocCOP2)
+		{
+			for (int slot = 0; slot < static_cast<int>(iREGCNT_GPR); slot++)
+			{
+				if (HostGprPhys(slot) == code)
+					return slot;
+			}
+		}
+		return code;
+	}
+
 	int         counter; // Current allocation count
 	int         index;   // VU0 or VU1
 
@@ -256,7 +279,7 @@ protected:
 			if (gprMap[i].VIreg == REG_I)
 			{
 //				xMOVDZX(reg, xRegister32(i));
-                armAsm->Fmov(reg.S(), armWRegister(i));
+                armAsm->Fmov(reg.S(), gprW(i));
                 if (!_XYZWss(xyzw)) {
 //                    xSHUF.PS(reg, reg, 0);
                     armSHUFPS(reg, reg, 0);
@@ -409,7 +432,7 @@ public:
 				}
 			}
 
-			for (i = 0; i < gprTotal; ++i)
+			for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
 			{
 				if (!x86regs[i].inuse || x86regs[i].type != X86TYPE_VIREG)
 					continue;
@@ -516,7 +539,7 @@ public:
 
 		for (i = 0; i < gprTotal; ++i)
 		{
-			writeBackReg(a64::WRegister(i), true);
+			writeBackGPR(i, true);
 			if (clearState)
 				clearGPR(i);
 		}
@@ -537,10 +560,10 @@ public:
 
 		for (i = 0; i < gprTotal; ++i)
 		{
-			if (!armIsCallerSaved(i))
+			if (!armIsCallerSaved(gprPhys(i)))
 				continue;
 
-			writeBackReg(a64::WRegister(i), true);
+			writeBackGPR(i, true);
 			if (clearNeeded || !gprMap[i].isNeeded)
 				clearGPR(i);
 		}
@@ -607,13 +630,13 @@ public:
 		}
 
 		for (i = 0; i < gprTotal; ++i) {
-            writeBackReg(a64::WRegister(i), false);
+            writeBackGPR(i, false);
         }
 	}
 
 	bool checkVFClamp(int regId)
 	{
-		if (regId != xmmPQ.GetCode() && ((xmmMap[regId].VFreg == 33 && !EmuConfig.Gamefixes.IbitHack) || xmmMap[regId].isZero))
+		if (regId != static_cast<int>(xmmPQ.GetCode()) && ((xmmMap[regId].VFreg == 33 && !EmuConfig.Gamefixes.IbitHack) || xmmMap[regId].isZero))
 			return false;
 		else
 			return true;
@@ -930,13 +953,13 @@ public:
 		return xmmX;
 	}
 
-	void clearGPR(const a64::Register& reg) { clearGPR(reg.GetCode()); }
+	void clearGPR(const a64::Register& reg) { clearGPR(gprIndex(reg)); }
 
 	void clearGPR(int regId)
 	{
 		microMapGPR& clear = gprMap[regId];
 
-		if (regAllocCOP2)
+		if (isCOP2Slot(regId))
 		{
 			if (x86regs[regId].inuse && x86regs[regId].type == X86TYPE_VIREG)
 			{
@@ -963,7 +986,9 @@ public:
 		if (!regAllocCOP2)
 			return;
 
-		const u32 rn = reg.GetCode();
+		const int rn = gprIndex(reg);
+		if (!isCOP2Slot(rn))
+			return;
 		const bool dirty = (gprMap[rn].VIreg >= 0 && gprMap[rn].dirty);
 		pxAssert(x86regs[rn].type == X86TYPE_VIREG);
 		x86regs[rn].reg = gprMap[rn].VIreg;
@@ -974,8 +999,11 @@ public:
 
 	void writeBackReg(const a64::Register& reg, bool clearDirty)
 	{
-		// reg.GetCode() is the slot index into gprMap
-		const int slot = reg.GetCode();
+		writeBackGPR(gprIndex(reg), clearDirty);
+	}
+
+	void writeBackGPR(int slot, bool clearDirty)
+	{
 		microMapGPR& mapX = gprMap[slot];
 		pxAssert(mapX.usable || !mapX.dirty);
 		if (mapX.dirty)
@@ -983,23 +1011,23 @@ public:
 			pxAssert(mapX.VIreg > 0);
 			if (mapX.VIreg < 16) {
 //                xMOV(ptr16[&getVI(mapX.VIreg)], xRegister16(reg));
-                armAsm->Strh(armWRegister(slot), PTR_CPU(vuRegs[index].VI[mapX.VIreg]));
+                armAsm->Strh(gprW(slot), PTR_CPU(vuRegs[index].VI[mapX.VIreg]));
             }
 			if (clearDirty)
 			{
 				mapX.dirty = false;
-				updateCOP2AllocState(reg);
+				updateCOP2AllocState(gprW(slot));
 			}
 		}
 	}
 
 	void clearNeeded(const a64::Register& reg)
 	{
-        u32 reg_code = reg.GetCode();
-		pxAssert(reg_code < gprTotal);
+        const int reg_code = gprIndex(reg);
+		pxAssert(reg_code >= 0 && reg_code < gprTotal);
 		microMapGPR& clear = gprMap[reg_code];
 		clear.isNeeded = false;
-		if (regAllocCOP2)
+		if (isCOP2Slot(reg_code))
 			x86regs[reg_code].needed = false;
 	}
 
@@ -1013,7 +1041,7 @@ public:
 			{
 				if (backup)
 				{
-					writeVIBackup(armWRegister(i));
+					writeVIBackup(gprW(i));
 					backup = false;
 				}
 
@@ -1061,7 +1089,7 @@ public:
 			{
 				int x = findFreeGPR(-1);
 //				const xRegister32& gprX = xRegister32::GetInstance(x);
-                const auto& gprX = armWRegister(x);
+                const auto& gprX = gprW(x);
 				writeBackReg(gprX, true);
 //				xXOR(gprX, gprX);
                 armAsm->Eor(gprX, gprX, gprX);
@@ -1096,7 +1124,7 @@ public:
 							// allocate a new register for writing to
 							int x = findFreeGPR(viWriteReg);
 //							const xRegister32& gprX = xRegister32::GetInstance(x);
-                            const auto& gprX = armWRegister(x);
+                            const auto& gprX = gprW(x);
 
 							writeBackReg(gprX, true);
 
@@ -1111,11 +1139,11 @@ public:
 
                             if (zext_if_dirty) {
 //                                xMOVZX(gprX, xRegister16(i));
-                                armAsm->Uxth(gprX, armWRegister(i));
+                                armAsm->Uxth(gprX, gprW(i));
                             }
                             else {
 //                                xMOV(gprX, xRegister32(i));
-                                armAsm->Mov(gprX, armWRegister(i));
+                                armAsm->Mov(gprX, gprW(i));
                             }
 							gprMap[x].isZeroExtended = zext_if_dirty;
 							MVURALOG("  clone write %d in %d to %d for %d\n", viLoadReg, i, x, viWriteReg);
@@ -1133,7 +1161,7 @@ public:
 					else if (zext_if_dirty && !gprMap[i].isZeroExtended)
 					{
 //						xMOVZX(xRegister32(i), xRegister16(i));
-                        auto reg32 = armWRegister(i);
+                        auto reg32 = gprW(i);
                         armAsm->Uxth(reg32, reg32);
 						gprMap[i].isZeroExtended = true;
 					}
@@ -1141,7 +1169,7 @@ public:
 					gprMap[i].isNeeded = true;
 
 					if (backup)
-						writeVIBackup(armWRegister(i));
+						writeVIBackup(gprW(i));
 
 					if (regAllocCOP2)
 					{
@@ -1152,7 +1180,7 @@ public:
 
 					MVURALOG("  returning cached in %d\n", i);
 //					return xRegister32::GetInstance(i);
-                    return armWRegister(i);
+                    return gprW(i);
 				}
 			}
 		}
@@ -1162,7 +1190,7 @@ public:
 
 		int x = findFreeGPR(viLoadReg);
 //		const xRegister32& gprX = xRegister32::GetInstance(x);
-        const auto& gprX = armWRegister(x);
+        const auto& gprX = gprW(x);
 		writeBackReg(gprX, true);
 
 		// Special case: we need to back up the destination register, but it might not have already

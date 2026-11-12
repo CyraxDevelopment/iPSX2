@@ -832,8 +832,6 @@ void VMManager::UpdateLoggingSettings(SettingsInterface& si)
 #ifdef _WIN32
 	const bool debug_console_enabled = IsDebuggerPresent() && si.GetBoolValue("Logging", "EnableDebugConsole", false);
 	Log::SetDebugOutputLevel(debug_console_enabled ? level : LOGLEVEL_NONE);
-#else
-	constexpr bool debug_console_enabled = false;
 #endif
 
 	const bool timestamps_enabled = si.GetBoolValue("Logging", "EnableTimestamps", true);

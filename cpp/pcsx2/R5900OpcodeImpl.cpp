@@ -1021,17 +1021,6 @@ void SYSCALL()
 		++s_sc_all;
 		if (s_sc_all >= 120 && s_sc_all <= 155) {
 			const char* mode2 = (Cpu != &intCpu) ? "JIT" : "Interp";
-			// [iter675] bufferバイト追跡: *MEM[0x93698] ポインタと先頭バイト
-			u32 buf_ptr = *(u32*)(eeMem->Main + 0x93698u);
-			u8 buf_byte = 0;
-			u32 buf_w0 = 0;
-			if (buf_ptr) {
-				u32 bp = buf_ptr & 0x01FFFFFFu;
-				if (bp + 4 <= 0x02000000u) {
-					buf_byte = *(u8*)(eeMem->Main + bp);
-					buf_w0 = *(u32*)(eeMem->Main + bp);
-				}
-			}
 			// Also check 0x93880 (2nd DMA buffer)
 			u8  b93880 = *(u8*)(eeMem->Main + 0x93880u);
 			u32 w93880 = *(u32*)(eeMem->Main + 0x93880u);

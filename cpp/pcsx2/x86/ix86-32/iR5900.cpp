@@ -2177,7 +2177,7 @@ void recClear(u32 addr, u32 size)
 		ceiling = pexblock->startpc;
 
 	int toRemoveLast = blockidx;
-	int cleared_count = 0;
+	[[maybe_unused]] int cleared_count = 0; // [TEMP_DIAG] read only by diagnostic builds
 
     u32 blockstart, blockend;
 	while ((pexblock = recBlocks[blockidx]))
@@ -3469,7 +3469,7 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
     if (pc <= s_nEndBlock && (g_pCurInstInfo + s_nEndBlock_pc) <= s_pInstCache + s_nInstCacheSize)
     {
         int i, count;
-        for (i = 0; i < iREGCNT_GPR; ++i)
+        for (i = 0; i < static_cast<int>(iREGCNT_GPR); ++i)
         {
             if (x86regs[i].inuse)
             {
@@ -3481,7 +3481,7 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
             }
         }
 
-        for (i = 0; i < iREGCNT_XMM; ++i)
+        for (i = 0; i < static_cast<int>(iREGCNT_XMM); ++i)
         {
             if (xmmregs[i].inuse)
             {
@@ -5064,7 +5064,6 @@ static void recRecompile(const u32 startpc)
 			const u32* c = reinterpret_cast<const u32*>(eeMem->Main + 0x0000ef10);
 			Console.WriteLn("@@JIT_EF18_DUMP@@ startpc=%08x cycle=%u", startpc, cpuRegs.cycle);
 			for (int j = 0; j < 24; j += 8) {
-				int lim = 24;
 				Console.WriteLn("@@JIT_EF18_CODE@@ [ef%02x]: %08x %08x %08x %08x %08x %08x %08x %08x",
 					0x10 + j*4,
 					c[j],c[j+1],c[j+2],c[j+3],c[j+4],c[j+5],c[j+6],c[j+7]);
@@ -5998,7 +5997,6 @@ static void recRecompile(const u32 startpc)
         }
     }
     HostSys::AutoCodeWrite writer(nullptr, 0); // Flush manually at end
-    const u8* recPtrStart = armGetCurrentCodePointer();
 
     // =========================================================================
     // [iter223] @@BIOS_INTERP_STUB@@ BIOS ROM 部分interpreter化

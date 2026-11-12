@@ -121,13 +121,16 @@ struct GamepadSettingsView: View {
         capturingIndex = ps2Index
         iPSX2Bridge.startButtonCapture()
         pollTimer?.invalidate()
+        // A timer scheduled from the main thread fires on the main run loop.
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            iPSX2Bridge.pollGamepadForCapture()
-            let captured = iPSX2Bridge.capturedButton()
-            if captured >= 0 {
-                iPSX2Bridge.setButtonMapping(Int32(ps2Index), toSDLButton: captured)
-                stopCapture()
-                mappingVersion += 1
+            MainActor.assumeIsolated {
+                iPSX2Bridge.pollGamepadForCapture()
+                let captured = iPSX2Bridge.capturedButton()
+                if captured >= 0 {
+                    iPSX2Bridge.setButtonMapping(Int32(ps2Index), toSDLButton: captured)
+                    stopCapture()
+                    mappingVersion += 1
+                }
             }
         }
     }
