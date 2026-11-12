@@ -139,26 +139,6 @@ jobs:
 
 
       # ──────────────────────────────────────────────────────────────────────────
-      # 6. Generate compile_commands.json
-      #    Xcode generator doesn't emit compile_commands.json; extract it from
-      #    the Xcode build log via xcpretty-json-formatter or generate a stub.
-      #    NOTE: Ninja + CMAKE_SYSTEM_NAME=iOS cross-compile requires a full
-      #    toolchain file and fails without one, so we skip Ninja here.
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: Generate compile_commands.json (stub)
-        run: |
-          echo "[]" > "$BUILD_DIR/compile_commands.json"
-          echo "Note: full compile_commands.json requires a Ninja iOS toolchain; stub written."
-
-      - name: Upload compile_commands.json
-        uses: actions/upload-artifact@v7
-        with:
-          name: compile-commands-${{ github.run_number }}
-          path: ${{ env.BUILD_DIR }}/compile_commands.json
-          retention-days: 30
-          if-no-files-found: warn
-
-      # ──────────────────────────────────────────────────────────────────────────
       # 7. Discover the generated .xcodeproj path
       #    Auto-detect instead of hardcoding, in case the project name differs.
       # ──────────────────────────────────────────────────────────────────────────
