@@ -45,13 +45,28 @@ struct FormatHandler
 	bool (*file_saver)(const RGBA8Image&, const char*, std::FILE*, u8);
 };
 
+#if TARGET_OS_IPHONE
+// [iPSX2] No libpng/libjpeg on iOS: PNG and JPEG go through ImageIO (ImageApple.mm). These were
+// built but never listed here, so every PNG/JPEG load and save failed with "Unknown extension".
+bool AppleImage_PNGBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size);
+bool AppleImage_PNGFileLoader(RGBA8Image* image, const char* filename, std::FILE* fp);
+bool AppleImage_PNGBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 quality);
+bool AppleImage_PNGFileSaver(const RGBA8Image& image, const char* filename, std::FILE* fp, u8 quality);
+bool AppleImage_JPEGBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size);
+bool AppleImage_JPEGFileLoader(RGBA8Image* image, const char* filename, std::FILE* fp);
+bool AppleImage_JPEGBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 quality);
+bool AppleImage_JPEGFileSaver(const RGBA8Image& image, const char* filename, std::FILE* fp, u8 quality);
+#endif
+
 static constexpr FormatHandler s_format_handlers[] = {
 #if !TARGET_OS_IPHONE
 	{"png", PNGBufferLoader, PNGBufferSaver, PNGFileLoader, PNGFileSaver},
-#endif
-#if !TARGET_OS_IPHONE
 	{"jpg", JPEGBufferLoader, JPEGBufferSaver, JPEGFileLoader, JPEGFileSaver},
 	{"jpeg", JPEGBufferLoader, JPEGBufferSaver, JPEGFileLoader, JPEGFileSaver},
+#else
+	{"png", AppleImage_PNGBufferLoader, AppleImage_PNGBufferSaver, AppleImage_PNGFileLoader, AppleImage_PNGFileSaver},
+	{"jpg", AppleImage_JPEGBufferLoader, AppleImage_JPEGBufferSaver, AppleImage_JPEGFileLoader, AppleImage_JPEGFileSaver},
+	{"jpeg", AppleImage_JPEGBufferLoader, AppleImage_JPEGBufferSaver, AppleImage_JPEGFileLoader, AppleImage_JPEGFileSaver},
 #endif
 	{"webp", WebPBufferLoader, WebPBufferSaver, WebPFileLoader, WebPFileSaver},
 };
