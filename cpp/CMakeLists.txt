@@ -74,7 +74,10 @@ endif()
 
 # [iPSX2] Several vendored sources compile to nothing on iOS (Vulkan, D3D, x86 SIMD paths);
 # libtool would otherwise report each empty object while archiving.
-set(CMAKE_XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-no_warning_for_no_symbols")
+# (CMake's Xcode generator fills OTHER_LIBTOOLFLAGS from CMAKE_STATIC_LINKER_FLAGS, so set it there.)
+set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -no_warning_for_no_symbols")
+# SDL3 and libc++ are pulled in by more than one dependency; the linker only needs them once.
+add_link_options(LINKER:-no_warn_duplicate_libraries)
 
 # include some generic functions to ensure correctness of the env
 include(Pcsx2Utils)
