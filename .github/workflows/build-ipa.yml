@@ -3,10 +3,10 @@ run-name: Build IPA · ${{ inputs.runner || 'macos-latest' }} · ${{ github.ref_
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
     tags: ['v*']          # a version tag builds the IPA and drafts a GitHub Release with it
   pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
     inputs:
       runner:
