@@ -37,6 +37,15 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - `SQRT.S` now really rounds to nearest, as PCSX2 intends.
 - A Metal convert pipeline (`RGB5A1_TO_8I`) is now built with the right attachment format.
 - The IOP `printf` emulation no longer writes one byte past its format buffer.
+- **microVU:** C calls made from inside a VU block (XGKICK, branch compilation) now preserve the status-flag registers and whole 128-bit vector registers. Before, flags could come back as garbage and the z/w lanes of cached registers and the P register were zeroed on every XGKICK.
+- **microVU COP2 mode:** VI registers shared with the EE recompiler now use the same host register on both sides. The VU side used the EE's slot number as a physical register, so integer VU0 instructions run from EE code could read and write the wrong register.
+- VU0 reading VU1's registers now reaches them instead of its own memory.
+- `SQRT.S`/`RSQRT.S` in full FPU mode round to nearest as well.
+
+**Save states work**
+
+- Saving used to fail every time: the thumbnail could not be encoded on iOS, and that discarded the whole state. Thumbnails are now encoded with ImageIO, and a state is saved even if its thumbnail cannot be made.
+- PNG and JPEG images (save-state thumbnails, game covers) can be decoded and encoded; the ImageIO codecs were built but never registered.
 
 **Settings that now actually apply**
 
@@ -60,10 +69,6 @@ Without JIT the emulator falls back to the interpreter, which is far too slow fo
 - **Emulator → Experimental:** MTVU (multi-threaded VU1), off by default.
 - **Emulator → Speedhacks:** EE Cycle Skip (0–3), with the EE Cycle Rate description corrected.
 - **Graphics → Performance:** Skip Duplicate Frames and Hardware Download Mode.
-
-**Known issues**
-
-- Save states do not work yet.
 
 ## Installing
 
