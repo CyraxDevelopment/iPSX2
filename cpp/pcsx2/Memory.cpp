@@ -53,6 +53,9 @@ namespace Ps2MemSize
 	u32 ExposedRam = MainRam;
 } // namespace Ps2MemSize
 
+// [iPSX2] Set once the devkit RAM has been mapped for the guest; see memReset().
+static bool s_extra_ram_may_be_dirty = false;
+
 namespace SysMemory
 {
 	static u8* TryAllocateVirtualMemory(const char* name, void* file_handle, uptr base, size_t size);
@@ -317,6 +320,8 @@ void memSetExtraMemMode(bool mode)
 
 	// update the amount of RAM exposed to the VM
 	Ps2MemSize::ExposedRam = mode ? Ps2MemSize::TotalRam : Ps2MemSize::MainRam;
+	if (mode)
+		s_extra_ram_may_be_dirty = true;
 }
 
 void memSetKernelMode() {
@@ -1273,7 +1278,17 @@ void memReset()
 	s_dve_regs[0x7e] = 0x1C; // Status register. 0x1C seems to be the value it's expecting for everything being OK.
 
 	// BIOS is included in eeMem, so it needs to be copied after zeroing.
-	std::memset(eeMem, 0, sizeof(*eeMem));
+	// [iPSX2] Zeroing the whole struct touched every page of the 96 MB of devkit RAM, which the
+	// guest can only reach when Extra Memory is enabled, and made all of it resident at boot.
+	// That region starts out zeroed by the kernel, so only clear it once it has been exposed.
+	std::memset(eeMem->Main, 0, sizeof(eeMem->Main));
+	if (s_extra_ram_may_be_dirty)
+		std::memset(eeMem->ExtraMemory, 0, sizeof(eeMem->ExtraMemory));
+	s_extra_ram_may_be_dirty = (Ps2MemSize::ExposedRam > Ps2MemSize::MainRam);
+	{
+		const size_t tail_offset = offsetof(EEVM_MemoryAllocMess, Scratch);
+		std::memset(reinterpret_cast<u8*>(eeMem) + tail_offset, 0, sizeof(*eeMem) - tail_offset);
+	}
 	CopyBIOSToMemory();
 
 }

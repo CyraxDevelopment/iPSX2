@@ -1040,7 +1040,8 @@ static void recReserve()
 	if (!m_recBlockAlloc)
 	{
 		// We're on 64-bit, if these memory allocations fail, we're in real trouble.
-		m_recBlockAlloc = (u8*)_aligned_malloc(m_recBlockAllocSize, 4096);
+		// [iPSX2] Pattern memory: the table only uses RAM for the pages that get written.
+		m_recBlockAlloc = static_cast<u8*>(HostSys::AllocatePatternMemory(m_recBlockAllocSize, 0));
 		if (!m_recBlockAlloc)
 			pxFailRel("Failed to allocate R3000A BASEBLOCK lookup tables");
 	}
@@ -1078,8 +1079,7 @@ void recResetIOP()
 //	recPtr = xGetPtr();
     recPtr = armEndBlock();
 
-	iopClearRecLUT((BASEBLOCK*)m_recBlockAlloc,
-		(((Ps2MemSize::IopRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2) / 4)));
+	HostSys::ResetPatternMemory(m_recBlockAlloc, m_recBlockAllocSize, static_cast<uptr>((uptr)iopJITCompile));
 
     // [iPSX2] Initialize recNULL with iopJITCompile (Trampoline/Stub)
     // iopRecRecompile is a C++ function and cannot be jumped to directly by JIT.
@@ -1148,7 +1148,8 @@ void recResetIOP()
 
 static void recShutdown()
 {
-	safe_aligned_free(m_recBlockAlloc);
+	HostSys::FreePatternMemory(m_recBlockAlloc, m_recBlockAllocSize);
+	m_recBlockAlloc = nullptr;
 
 	safe_free(s_pInstCache);
 	s_nInstCacheSize = 0;

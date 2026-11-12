@@ -4,6 +4,7 @@
 #pragma once
 #include "microVU.h"
 #include <array>
+#include <vector>
 
 struct regCycleInfo
 {
@@ -68,12 +69,70 @@ struct microJumpCache
 	void* x86ptrStart;  // Start of code (Entry point for block)
 };
 
+// [iPSX2] Entry points reached from one JR/JALR block, keyed by (target PC / 8).
+// This used to be a dense array with a slot for every possible target (2048 entries, 32 KiB,
+// all written by new[]), allocated for every block ending in an indirect jump. A block only
+// ever reaches a handful of targets, so the tables added up to tens of MB of zeros. A small
+// open-addressing table that grows with the targets actually seen holds the same data.
+class microJumpCacheTable
+{
+public:
+	// Returns the entry for idx, creating an empty one (prog == NULL) on first use.
+	microJumpCache& get(u32 idx)
+	{
+		if ((m_count + 1) * 2 > m_entries.size())
+			grow();
+
+		const u32 mask = static_cast<u32>(m_entries.size()) - 1;
+		for (u32 i = hash(idx) & mask;; i = (i + 1) & mask)
+		{
+			Entry& e = m_entries[i];
+			if (e.key == idx + 1)
+				return e.jc;
+			if (e.key == 0)
+			{
+				e.key = idx + 1;
+				m_count++;
+				return e.jc;
+			}
+		}
+	}
+
+private:
+	struct Entry
+	{
+		u32 key = 0; // idx + 1, 0 = empty
+		microJumpCache jc;
+	};
+
+	static u32 hash(u32 idx) { return (idx * 2654435761u) >> 12; }
+
+	void grow()
+	{
+		std::vector<Entry> old = std::move(m_entries);
+		m_entries.assign(old.empty() ? 8 : old.size() * 2, Entry());
+		const u32 mask = static_cast<u32>(m_entries.size()) - 1;
+		for (const Entry& e : old)
+		{
+			if (e.key == 0)
+				continue;
+			u32 i = hash(e.key - 1) & mask;
+			while (m_entries[i].key != 0)
+				i = (i + 1) & mask;
+			m_entries[i] = e;
+		}
+	}
+
+	std::vector<Entry> m_entries;
+	u32 m_count = 0;
+};
+
 struct alignas(16) microBlock
 {
 	microRegInfo    pState;      // Detailed State of Pipeline
 	microRegInfo    pStateEnd;   // Detailed State of Pipeline at End of Block (needed by JR/JALR opcodes)
 	u8*             x86ptrStart; // Start of code (Entry point for block)
-	microJumpCache* jumpCache;   // Will point to an array of entry points of size [16k/8] if block ends in JR/JALR
+	microJumpCacheTable* jumpCache; // Entry points reached from this block, if it ends in JR/JALR
 };
 
 struct microTempRegInfo

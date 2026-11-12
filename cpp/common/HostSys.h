@@ -95,6 +95,18 @@ namespace HostSys
 	// Returns NULL on allocation failure.
 	extern void* Mmap(void* base, size_t size, const PageProtectionMode& mode);
 
+#ifdef __APPLE__
+	// [iPSX2] Pattern memory: a private read/write region in which every pointer-sized word
+	// reads as `pattern` until it is written. Untouched pages share one physical copy of the
+	// pattern (copy-on-write), so a large lookup table costs RAM only for the pages actually
+	// written. With pattern == 0 it is plain lazily-zeroed memory.
+	// Sizes are rounded up to the host page size; pass the same size to all three calls.
+	extern void* AllocatePatternMemory(size_t size, uptr pattern);
+	// Puts every word back to `pattern` and gives the written pages back to the system.
+	extern void ResetPatternMemory(void* ptr, size_t size, uptr pattern);
+	extern void FreePatternMemory(void* ptr, size_t size);
+#endif
+
 	// Unmaps a block allocated by SysMmap
 	extern void Munmap(void* base, size_t size);
 

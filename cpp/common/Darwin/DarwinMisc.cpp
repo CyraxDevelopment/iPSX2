@@ -18,6 +18,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <unistd.h>
+#include <algorithm>
+#include <iterator>
 #include <optional>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -463,6 +465,128 @@ void* HostSys::Mmap(void* base, size_t size, const PageProtectionMode& mode)
 	if (res == MAP_FAILED) return nullptr;
 	return res;
 #endif
+}
+
+// ---------------------------------------------------------------------------------------
+// [iPSX2] Pattern memory (see HostSys.h)
+// ---------------------------------------------------------------------------------------
+namespace
+{
+	// One read-only megabyte per distinct pattern; every pattern region is built out of
+	// copy-on-write views of it. A megabyte keeps the number of remap calls small.
+	constexpr size_t PATTERN_CHUNK_SIZE = 1u << 20;
+
+	struct PatternSource
+	{
+		uptr pattern;
+		void* chunk;
+	};
+	PatternSource s_pattern_sources[8];
+	u32 s_pattern_source_count = 0;
+
+	size_t PatternRoundSize(size_t size)
+	{
+		const size_t page = static_cast<size_t>(getpagesize());
+		return (size + page - 1) & ~(page - 1);
+	}
+
+	void PatternFill(void* ptr, size_t size, uptr pattern)
+	{
+		uptr* const words = static_cast<uptr*>(ptr);
+		const size_t count = size / sizeof(uptr);
+		for (size_t i = 0; i < count; i++)
+			words[i] = pattern;
+	}
+
+	void* PatternGetChunk(uptr pattern)
+	{
+		for (u32 i = 0; i < s_pattern_source_count; i++)
+		{
+			if (s_pattern_sources[i].pattern == pattern)
+				return s_pattern_sources[i].chunk;
+		}
+		if (s_pattern_source_count >= std::size(s_pattern_sources))
+			return nullptr;
+
+		void* chunk = mmap(nullptr, PATTERN_CHUNK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+		if (chunk == MAP_FAILED)
+			return nullptr;
+		PatternFill(chunk, PATTERN_CHUNK_SIZE, pattern);
+
+		s_pattern_sources[s_pattern_source_count++] = {pattern, chunk};
+		return chunk;
+	}
+
+	// Replaces [base, base + size) with fresh pattern pages. False means nothing usable was
+	// mapped and the caller has to fill the region by hand.
+	bool PatternMap(void* base, size_t size, uptr pattern)
+	{
+		if (pattern == 0)
+		{
+			return mmap(base, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == base;
+		}
+
+		void* const chunk = PatternGetChunk(pattern);
+		if (!chunk)
+			return false;
+
+		for (size_t offset = 0; offset < size; offset += PATTERN_CHUNK_SIZE)
+		{
+			const size_t len = std::min(PATTERN_CHUNK_SIZE, size - offset);
+			const mach_vm_address_t want = reinterpret_cast<mach_vm_address_t>(static_cast<u8*>(base) + offset);
+			mach_vm_address_t dst = want;
+			vm_prot_t cur = VM_PROT_NONE, max = VM_PROT_NONE;
+			const kern_return_t kr = mach_vm_remap(mach_task_self(), &dst, len, 0,
+				VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, mach_task_self(),
+				reinterpret_cast<mach_vm_address_t>(chunk), TRUE /* copy-on-write */, &cur, &max, VM_INHERIT_COPY);
+			if (kr != KERN_SUCCESS || dst != want)
+				return false;
+		}
+
+		return mprotect(base, size, PROT_READ | PROT_WRITE) == 0;
+	}
+} // namespace
+
+void* HostSys::AllocatePatternMemory(size_t size, uptr pattern)
+{
+	size = PatternRoundSize(size);
+	void* const base = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (base == MAP_FAILED)
+		return nullptr;
+
+	if (pattern != 0 && !PatternMap(base, size, pattern))
+	{
+		// Could not share pattern pages: fall back to a region that is simply filled.
+		if (mmap(base, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) != base)
+		{
+			munmap(base, size);
+			return nullptr;
+		}
+		PatternFill(base, size, pattern);
+	}
+	return base;
+}
+
+void HostSys::ResetPatternMemory(void* ptr, size_t size, uptr pattern)
+{
+	if (!ptr)
+		return;
+
+	size = PatternRoundSize(size);
+	if (!PatternMap(ptr, size, pattern))
+	{
+		// The region may be partly remapped; make all of it writable anonymous memory again
+		// before filling, so the pattern source is never written through.
+		if (mmap(ptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) != ptr)
+			pxFailRel("Failed to reset pattern memory");
+		PatternFill(ptr, size, pattern);
+	}
+}
+
+void HostSys::FreePatternMemory(void* ptr, size_t size)
+{
+	if (ptr)
+		munmap(ptr, PatternRoundSize(size));
 }
 
 void HostSys::Munmap(void* base, size_t size)

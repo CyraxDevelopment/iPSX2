@@ -96,8 +96,13 @@ extern "C" void LogUnified(const char* fmt, ...);
 #define iPSX2_ENABLE_TEMP_DIAG 0
 #endif
 
-static DynamicHeapArray<u8, 4096> recRAMCopy;
-static DynamicHeapArray<u8, 4096> recLutReserve_RAM;
+// [iPSX2] Both come from HostSys pattern memory, so they only use RAM for the pages that are
+// written. As heap arrays they were filled on every reset: ~80 MB of JITCompile pointers for
+// the block lookup table and 32 MB of zeros for the RAM copy, nearly all of it never touched.
+static u8* recRAMCopy = nullptr;
+static size_t recRAMCopySize = 0;
+static u8* recLutReserve_RAM = nullptr;
+static size_t recLutReserveSize = 0;
 static size_t recLutSize;
 static bool extraRam;
 
@@ -1486,13 +1491,26 @@ static void recReserveRAM()
 {
 	recLutSize = (Ps2MemSize::ExposedRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2) * wordsize / 4;
 
-	if (recRAMCopy.size() != Ps2MemSize::ExposedRam)
-		recRAMCopy.resize(Ps2MemSize::ExposedRam);
+	if (recRAMCopySize != Ps2MemSize::ExposedRam)
+	{
+		HostSys::FreePatternMemory(recRAMCopy, recRAMCopySize);
+		recRAMCopySize = Ps2MemSize::ExposedRam;
+		recRAMCopy = static_cast<u8*>(HostSys::AllocatePatternMemory(recRAMCopySize, 0));
+		if (!recRAMCopy)
+			pxFailRel("Failed to allocate the R5900 RAM copy");
+	}
 
-	if (recLutReserve_RAM.size() != recLutSize)
-		recLutReserve_RAM.resize(recLutSize);
+	if (recLutReserveSize != recLutSize)
+	{
+		HostSys::FreePatternMemory(recLutReserve_RAM, recLutReserveSize);
+		recLutReserveSize = recLutSize;
+		// Zeroed for now; recResetRaw() points every entry at JITCompile once it exists.
+		recLutReserve_RAM = static_cast<u8*>(HostSys::AllocatePatternMemory(recLutReserveSize, 0));
+		if (!recLutReserve_RAM)
+			pxFailRel("Failed to allocate the R5900 block lookup table");
+	}
 
-	BASEBLOCK* basepos = reinterpret_cast<BASEBLOCK*>(recLutReserve_RAM.data());
+	BASEBLOCK* basepos = reinterpret_cast<BASEBLOCK*>(recLutReserve_RAM);
 	recRAM = basepos;
 	basepos += (Ps2MemSize::ExposedRam / 4);
 	recROM = basepos;
@@ -1592,8 +1610,8 @@ static void recResetRaw()
     recPtr = armEndBlock();
 	Console.WriteLn(Color_StrongBlack, "EE: iR5900: recResetRaw complete.");
 
-	ClearRecLUT(reinterpret_cast<BASEBLOCK*>(recLutReserve_RAM.data()), recLutSize);
-	recRAMCopy.fill(0);
+	HostSys::ResetPatternMemory(recLutReserve_RAM, recLutReserveSize, static_cast<uptr>((uptr)JITCompile));
+	HostSys::ResetPatternMemory(recRAMCopy, recRAMCopySize, 0);
 
 	maxrecmem = 0;
 
@@ -1615,8 +1633,12 @@ static void recResetRaw()
 
 void recShutdown()
 {
-	recRAMCopy.deallocate();
-	recLutReserve_RAM.deallocate();
+	HostSys::FreePatternMemory(recRAMCopy, recRAMCopySize);
+	recRAMCopy = nullptr;
+	recRAMCopySize = 0;
+	HostSys::FreePatternMemory(recLutReserve_RAM, recLutReserveSize);
+	recLutReserve_RAM = nullptr;
+	recLutReserveSize = 0;
 
 	recBlocks.Reset();
 

@@ -1131,7 +1131,7 @@ _mVUt void* mVUcompileJIT(u32 startPC, uptr ptr)
 		{
 			microVU& mVU = mVUx;
 			auto* pBlock = (microBlock*)ptr;
-			microJumpCache& jc = pBlock->jumpCache[startPC_8];
+			microJumpCache& jc = pBlock->jumpCache->get(startPC_8);
 			if (jc.prog && jc.prog == mVU.prog.quick[startPC_8].prog)
 				return jc.x86ptrStart;
 			void* v = mVUblockFetch(mVUx, startPC, (uptr)&pBlock->pStateEnd);
@@ -1146,7 +1146,7 @@ _mVUt void* mVUcompileJIT(u32 startPC, uptr ptr)
 	{
 		microVU& mVU = mVUx;
 		auto* pBlock = (microBlock*)ptr;
-		microJumpCache& jc = pBlock->jumpCache[startPC_8];
+		microJumpCache& jc = pBlock->jumpCache->get(startPC_8);
 		if (jc.prog && jc.prog == mVU.prog.quick[startPC_8].prog)
 			return jc.x86ptrStart;
 		void* v = mVUsearchProg<vuIndex>(startPC, (uptr)&pBlock->pStateEnd);

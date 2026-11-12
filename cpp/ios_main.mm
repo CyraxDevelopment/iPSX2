@@ -580,6 +580,8 @@ struct rc_client_t;
 
 // iOS specific headers
 #import <UIKit/UIKit.h>
+#include <mach/mach.h>
+#include <time.h>
 #include <mach-o/dyld.h>
 #include "common/Darwin/DarwinMisc.h" // For iPSX2_CRASH_DIAG
 
@@ -815,6 +817,26 @@ namespace Host
         // [F1] Must stay first: every path below can return early, and a drain placed after one
         // of them would never run again for the rest of the session.
         iPSX2::DrainCPUThreadTasks();
+
+        // [iPSX2] Log the app's memory footprint once a minute. phys_footprint is the number iOS
+        // compares against the per-app limit when it decides to kill a process, so the log shows
+        // how close a session got.
+        {
+            static u64 s_next_mem_log_ns = 0;
+            const u64 now_ns = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+            if (now_ns >= s_next_mem_log_ns)
+            {
+                s_next_mem_log_ns = now_ns + 60ull * 1000000000ull;
+                task_vm_info_data_t vm_info = {};
+                mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+                if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&vm_info), &count) == KERN_SUCCESS)
+                {
+                    Console.WriteLn("[Memory] footprint=%llu MB (peak %llu MB)",
+                        static_cast<unsigned long long>(vm_info.phys_footprint >> 20),
+                        static_cast<unsigned long long>(vm_info.ledger_phys_footprint_peak >> 20));
+                }
+            }
+        }
 
 // Check for VM shutdown request (safe: runs on CPU thread)
         if (s_requestVMStop.load()) {

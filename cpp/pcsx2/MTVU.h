@@ -98,7 +98,7 @@ public:
 private:
 	void ExecuteRingBuffer();
 
-	void WaitOnSize(s32 size);
+	void WaitOnSize(s32 size, bool before_wrap = false);
 	void ReserveSpace(s32 size);
 
 	s32 GetReadPos();

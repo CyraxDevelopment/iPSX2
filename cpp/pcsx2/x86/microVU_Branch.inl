@@ -393,7 +393,7 @@ void normJumpCompile(mV, microFlagCycles& mFC, bool isEvilJump)
 
 	if (!mVUpBlock->jumpCache) // Create the jump cache for this block
 	{
-		mVUpBlock->jumpCache = new microJumpCache[mProgSizeHalf]; // mProgSize / 2
+		mVUpBlock->jumpCache = new microJumpCacheTable();
 	}
 
     if (isEvilJump)
