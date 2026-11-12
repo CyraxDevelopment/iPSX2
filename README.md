@@ -2,6 +2,17 @@
 
 A PlayStation 2 emulator for iPhone and iPad, built on PCSX2 / ARMSX2 with a JIT recompiler for arm64.
 
+[![Release](https://img.shields.io/github/v/release/iPSX2/iPSX2?include_prereleases&label=release)](https://github.com/iPSX2/iPSX2/releases)
+[![Downloads](https://img.shields.io/github/downloads/iPSX2/iPSX2/total?label=downloads)](https://github.com/iPSX2/iPSX2/releases)
+[![Stars](https://img.shields.io/github/stars/iPSX2/iPSX2?style=flat&label=stars)](https://github.com/iPSX2/iPSX2/stargazers)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](COPYING.GPLv3)
+![Platform](https://img.shields.io/badge/platform-iOS%2018%2B%20%C2%B7%20arm64-lightgrey)
+
+| Branch | Build | Last commit | What it is |
+|---|---|---|---|
+| [`main`](https://github.com/iPSX2/iPSX2/tree/main) | [![main](https://github.com/iPSX2/iPSX2/actions/workflows/build-ipa.yml/badge.svg?branch=main)](https://github.com/iPSX2/iPSX2/actions/workflows/build-ipa.yml?query=branch%3Amain) | ![main](https://img.shields.io/github/last-commit/iPSX2/iPSX2/main?label=) | Tested on a device. Releases are tagged from here. |
+| [`dev`](https://github.com/iPSX2/iPSX2/tree/dev) | [![dev](https://github.com/iPSX2/iPSX2/actions/workflows/build-ipa.yml/badge.svg?branch=dev)](https://github.com/iPSX2/iPSX2/actions/workflows/build-ipa.yml?query=branch%3Adev) | ![dev](https://img.shields.io/github/last-commit/iPSX2/iPSX2/dev?label=) | Work in progress, waiting for device testing. May break. |
+
 **Website:** [ipsx2.github.io](https://ipsx2.github.io) · **Downloads:** [Releases](../../releases)
 
 This is a standalone fork of [Thiago-Heleno/iPSX2-src](https://github.com/Thiago-Heleno/iPSX2-src). It keeps the JIT core and focuses on performance, accuracy fixes, and a more complete frontend.
