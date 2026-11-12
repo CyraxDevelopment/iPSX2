@@ -9,6 +9,8 @@
 #include <sched.h>
 #include <sys/time.h> // gettimeofday()
 #include <pthread.h>
+#include <pthread/qos.h>
+#include <TargetConditionals.h>
 #include <unistd.h>
 #include <mach/mach.h>
 #include <mach/mach_error.h> // mach_error_string()
@@ -222,6 +224,13 @@ void Threading::Thread::SetStackSize(u32 size)
 void* Threading::Thread::ThreadProc(void* param)
 {
 	std::unique_ptr<EntryPoint> entry(static_cast<EntryPoint*>(param));
+#if TARGET_OS_IPHONE
+	// A pthread gets the default QoS class unless it asks for more. iOS is free to run
+	// default-class threads on the efficiency cores and at a low clock, which shows up as the
+	// whole game dropping to slow motion until the load pattern changes. These are the GS,
+	// MTVU and renderer worker threads, all of which the picture on screen is waiting for.
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 	(*entry.get())();
 	return nullptr;
 }

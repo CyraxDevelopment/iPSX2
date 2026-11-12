@@ -1,6 +1,9 @@
 // Set SDL_MAIN_HANDLED to prevent SDL from redefining main()
 #define SDL_MAIN_HANDLED
 
+#include <pthread.h>
+#include <pthread/qos.h>
+
 #if defined(iPSX2_MACOS)
 // ============================================================================
 // [P63] macOS native build — full PCSX2 initialization + SDL Metal window
@@ -1653,6 +1656,10 @@ static INISettingsInterface* s_settings_interface = nullptr;
     Console.WriteLn("[VM] Creating persistent VM thread...");
 
     std::thread vmThread([]() {
+        // The EE runs here. Without this the thread has the default QoS class and iOS may park
+        // it on an efficiency core (see Threading::Thread::ThreadProc).
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
         // === ONE-TIME INIT (runs once per app lifetime) ===
         Console.WriteLn("[VM] VM Thread: CPUThreadInitialize (once)...");
         if (!VMManager::Internal::CPUThreadInitialize()) {
