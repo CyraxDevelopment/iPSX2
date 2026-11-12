@@ -100,6 +100,10 @@ cpp/            C++ / Objective-C++ core
 swift/          SwiftUI frontend (views, settings, game list)
 ```
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=iPSX2/iPSX2&type=Date)](https://star-history.com/#iPSX2/iPSX2&Date)
+
 ## Credits
 
 - [PCSX2](https://github.com/PCSX2/pcsx2) team, for the emulator this is built on
