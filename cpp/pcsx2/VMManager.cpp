@@ -2265,7 +2265,10 @@ bool VMManager::DoSaveState(const char* filename, s32 slot_for_message, bool zip
 		ZipSaveState(std::move(elist), std::move(screenshot), std::move(osd_key), filename, slot_for_message);
 	}
 
-	Host::OnSaveStateSaved(filename);
+	// [iPSX2] When zipping on a thread the file does not exist yet, and a frontend that lists
+	// the slots now would still see the old contents. That thread reports once it has written.
+	if (!zip_on_thread)
+		Host::OnSaveStateSaved(filename);
 	MemcardBusy::CheckSaveStateDependency();
 	return true;
 }
@@ -2300,6 +2303,7 @@ void VMManager::ZipSaveStateOnThread(std::unique_ptr<ArchiveEntryList> elist,
 	s32 slot_for_message)
 {
 	ZipSaveState(std::move(elist), std::move(screenshot), std::move(osd_key), filename.c_str(), slot_for_message);
+	Host::OnSaveStateSaved(filename);
 
 	// remove ourselves from the thread list. if we're joining, we might not be in there.
 	const auto this_id = std::this_thread::get_id();

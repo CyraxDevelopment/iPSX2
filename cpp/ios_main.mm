@@ -1775,6 +1775,9 @@ static INISettingsInterface* s_settings_interface = nullptr;
                     } else if (state == VMState::Running) {
                         VMManager::Execute();
                     } else {
+                        // Paused: Execute() is not running, so nothing else drains the CPU-thread
+                        // queue. Resume, save-state and settings requests all arrive through it.
+                        Host::PumpMessagesOnCPUThread();
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     }
                 }
